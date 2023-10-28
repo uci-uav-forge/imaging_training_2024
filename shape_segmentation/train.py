@@ -5,6 +5,8 @@ if task=='segmentation':
     model = YOLO('yolov8n-seg.yaml')
 elif task=='detection':
     model = YOLO('yolov8n.yaml')
+else:
+    raise NotImplementedError
     
 model.train(
     data='shapes_2023.yaml', 
