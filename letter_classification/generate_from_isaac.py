@@ -21,10 +21,13 @@ CURRENT_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
 from_path = CURRENT_FILE_PATH + "/isaac_sim_dataset"
 to_path = CURRENT_FILE_PATH + "/datasets/dataset"
 category = "validation"
+start_index = 450
+end_index = 500
+
 num_classes = 28  # change this when a more complete dataset is available
 
 # create empty folders (if not yet created) for the letter images (folder name = class label)
-for label in range(0, 28):
+for label in range(start_index, end_index):
     os.makedirs(f"{to_path}/{category}/{label}", exist_ok = True) 
 
 for i in range(450, 500):  # range of file numbers of npy file and image
