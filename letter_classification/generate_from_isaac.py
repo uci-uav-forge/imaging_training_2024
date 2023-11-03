@@ -27,14 +27,14 @@ end_index = 500
 num_classes = 28  # change this when a more complete dataset is available
 
 # create empty folders (if not yet created) for the letter images (folder name = class label)
-for label in range(start_index, end_index):
+for label in range(num_classes):
     os.makedirs(f"{to_path}/{category}/{label}", exist_ok = True) 
 
-for i in range(450, 500):  # range of file numbers of npy file and image
-    file_index = f"{i:04d}" # 4 digits for each index (e.g. 0001, 0100)
-    boxes = np.load(f"{from_path}/bounding_box_npy/bounding_box_2d_tight_{file_index}.npy")
-    img = cv.imread(f"{from_path}/images/rgb_{file_index}.png")
-    j = 0
+file_numbers = [f"{i:04d}" for i in range(start_index, end_index)] # 4 digits for each index (e.g. 0001, 0100)
+for file_number in file_numbers:  # range of file numbers of npy file and image
+    boxes = np.load(f"{from_path}/bounding_box_npy/bounding_box_2d_tight_{file_number}.npy")
+    img = cv.imread(f"{from_path}/images/rgb_{file_number}.png")
+    i = 0  # counter for each cropped image within a fullsize image
     for box in boxes:
         # box[0] contains the class label
         label = box[0]
@@ -42,7 +42,7 @@ for i in range(450, 500):  # range of file numbers of npy file and image
             # label 0: background
             # label 1: shape
             # the box contains a letter, so we crop it out
-            # remap label so that the first letter label starts from 1
+            # remap label so that the first letter label starts from 0
             label -= 2
             # [y_to:y_from, x_to:x_from]
             if box[1] > 0: box[1] -= 1
@@ -51,5 +51,5 @@ for i in range(450, 500):  # range of file numbers of npy file and image
             if box[4] < img.shape[1]-1: box[4] += 1
             cropped_image = img[box[2]:box[4], box[1]:box[3]]
             result_image  = cv.resize(cropped_image, (128,128))
-            cv.imwrite(f"{to_path}/{category}/{label}/rbg_{file_index}_{j}.png", result_image)
-            j += 1
+            cv.imwrite(f"{to_path}/{category}/{label}/rbg_{file_number}_{i}.png", result_image)
+            i += 1
