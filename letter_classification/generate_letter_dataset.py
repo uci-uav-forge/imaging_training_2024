@@ -5,6 +5,9 @@ import sys
 from dataclasses import dataclass
 
 CURRENT_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
+# set this to true if the letter dataset's labels are letters first (0-25) then numbers (26-35)
+# new letter datasets should have labels that are numbers first (0-9) then letters (10-35)
+OLD_LABELS = False
 
 @dataclass
 class LetterBoxInfo:
@@ -42,9 +45,15 @@ def generate_letter_dataset_from_folder(from_folder, to_folder):
             x, y = box_info.x, box_info.y
             w, h = box_info.width, box_info.height
             label = box_info.letter_label
+            if OLD_LABELS:
+                # convert old labels to new labels
+                if label <= 24:
+                    label += 10
+                else:
+                    label -= 25
             with open(f"{to_folder}/labels/{img_file_name.split('.')[0]}_{i}.txt", 'w') as f:
                 f.write(str(label))
-            cropped_image = img[int(y+h/4):int(y+(3*h/4)), int(x+w/4):int(x+(3*w/4))]
+            cropped_image = img[y:(y+h), x:(x+w)]
             result_image  = cv.resize(cropped_image, (128,128))
             cv.imwrite(f"{to_folder}/images/{img_file_name.split('.')[0]}_{i}.png", result_image)
             i += 1
@@ -57,4 +66,3 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         to_folder = str(sys.argv[2])
     generate_letter_dataset_from_folder(from_folder, to_folder)
-
