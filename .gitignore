@@ -1,3 +1,5 @@
 # auto-generated stuff by yolov8
 runs
 *.cache
+letter_classification/isaac_sim_dataset
+letter_classification/datasets
