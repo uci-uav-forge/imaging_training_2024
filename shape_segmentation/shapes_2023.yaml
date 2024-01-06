@@ -9,16 +9,10 @@ test: images/test # test images
 # Classes
 names:
   0: circle
-  1: cross
-  2: heptagon
-  3: hexagon
-  4: octagon
+  1: semicircle
+  2: quarter circle
+  3: triangle
+  4: rectangle
   5: pentagon
-  6: quartercircle
-  7: rectangle
-  8: semicircle
-  9: square
-  10: star
-  11: trapezoid
-  12: triangle
-  13: person
+  6: star
+  7: cross
