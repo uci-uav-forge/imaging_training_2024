@@ -5,3 +5,4 @@ letter_classification/isaac_sim_dataset
 letter_classification/datasets
 _uavf_imaging_data
 /data
+*.pyc
