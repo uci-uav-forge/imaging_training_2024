@@ -20,24 +20,37 @@ Between the images and labels folder, the names of the files must match. For exa
 
 Images must all be the same resolution (will be specified in later argument)
 
-each label file must be in the format:
-    class_num x_center y_center width height x2_center y2_center width2 height2 ...
+each label file must be in the format (bounding box annotations):
+    class_num x1_center y1_center width1 height1 
+    class_num x2_center y2_center width2 height2
 
 for example:
-    4 0.4984375 0.5510416666666667 0.48984375 0.5291666666666667 0.44765625 0.5479166666666667 0.40390625 0.5375
+    4 0.4984375 0.5510416666666667 0.48984375 0.5291666666666667 
+    4 0.44765625 0.5479166666666667 0.40390625 0.5375
 
-    Class index: 4
+    Class index: 4 (for both)
     Bounding box annotations (in pairs):
     Center: (0.4984375, 0.5510416666666667), Dimensions: (0.48984375, 0.5291666666666667)
     Center: (0.44765625, 0.5479166666666667), Dimensions: (0.40390625, 0.5375)
     ... and so on.
 
-    data.yaml must be in the format:
-        train: path/to/train/images
-        val: path/to/val/images
-        test: path/to/test/images
-        nc: number_of_classes
-        names: [class0, class1, ...]
+each label file must be in the format (segmentation annotations):
+    class_num x1 y1 x2 y2 x3 y3...xn yn
+    // There must be at least 3 pairs
+
+for example:
+    4 0.4984375 0.5510416666666667 0.48984375 0.5291666666666667 0.44765625 0.5479166666666667 0.40390625 0.5375
+
+    Class index: 4
+    Segmentation annotations (in pairs):
+    (0.4984375, 0.5510416666666667), (0.48984375, 0.5291666666666667), (0.44765625, 0.5479166666666667), (0.40390625, 0.5375)
+
+data.yaml must be in the format:
+    train: path/to/train/images
+    val: path/to/val/images
+    test: path/to/test/images
+    nc: number_of_classes
+    names: [class0, class1, ...]
 
     for example:
         train: ../train/images
