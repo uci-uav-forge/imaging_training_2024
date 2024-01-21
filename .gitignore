@@ -6,3 +6,5 @@ letter_classification/datasets
 _uavf_imaging_data
 /data
 *.pyc
+issac_to_yolo/sample_yolo_dataset
+.DS_Store
