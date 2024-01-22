@@ -9,3 +9,4 @@ _uavf_imaging_data
 issac_to_yolo/sample_yolo_dataset
 .DS_Store
 *.egg-info
+*.code-workspace
