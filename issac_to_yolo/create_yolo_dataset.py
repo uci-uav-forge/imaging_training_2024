@@ -1,19 +1,13 @@
 from pathlib import Path
-from sim_data_interface import config
 import shutil
 import numpy as np
 import json
 from io import StringIO
 from PIL import Image
 from tqdm import tqdm
+from yolo_config import *
 
-
-#---------------------------
-# The base output directory for the YOLO dataset
-TARGET_DIR = Path('/Volumes/SANDISK/YOLO_DATASET/') # Change this to your desired output directory
-DATSET_FORMAT = 'bbox' # 'bbox' or 'semantic'
-CREATE_NEW_VERSION = False
-#---------------------------
+# Create the target directory
 version_number = 1
 
 if CREATE_NEW_VERSION:
@@ -60,7 +54,7 @@ TARGET_VALID_LABEL_DIR.mkdir(parents=True)
 
 # Determine the amount of images
 
-GEN_IMAGES = list(config.IMAGES_DIR.glob('[!.]*.png'))
+GEN_IMAGES = list(IMAGES_DIR.glob('[!.]*.png'))
 NUM_IMAGES = len(GEN_IMAGES)
 print(f'Found {NUM_IMAGES} images')
 
@@ -109,7 +103,7 @@ def create_bbox_label_file(image_path : Path):
     id_value = get_file_id(image_path)
 
     # Create a bbox label file for the given image id
-    label_pos = get_file_by_id(id_value, config.BOXES_DIR) #npy type
+    label_pos = get_file_by_id(id_value, BOXES_DIR) #npy type
     
     # Load the label position data
     with open(label_pos, 'rb') as label_pos_file:
@@ -129,7 +123,7 @@ def create_bbox_label_file(image_path : Path):
     for entry in label_pos_data:
         if str(entry[0]) not in found_classes.keys():
              # Load the class label data
-            class_label = get_file_by_id(id_value, config.BOXES_LEGEND_DIR) #json type
+            class_label = get_file_by_id(id_value, BOXES_LEGEND_DIR) #json type
             with open(class_label) as class_label_file:
                 class_label_data = json.load(class_label_file)
             found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
