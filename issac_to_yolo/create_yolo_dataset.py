@@ -8,7 +8,8 @@ from tqdm import tqdm
 from yolo_config import *
 import math
 import time
-from multiprocessing import Pool
+# from multiprocessing import Pool (this is for processes, not threads)
+from multiprocessing.pool import ThreadPool as Pool #(for threads)
 
 if __name__ == '__main__':
     # Reduces the dataset to a smaller size for testing (50 images)
@@ -198,6 +199,7 @@ def create_bbox_label_file(image_path : Path):
                     height = (entry[4] - entry[2]) / TILE_SIZE
 
                     # Write the yolo format values to the temp file
+                    if DEBUG: tempFile.write(f"{entry}\n")
                     tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
         label_files.append(tempFile.getvalue())
     names = [id_value+'_'+str(i) for i in range(len(tiles))]
@@ -209,10 +211,10 @@ def write_label_files(id_values, label_files, target_dir):
             f.write(label_file)
 
 def tile_writer(id_value, tile, target_dir):
-    tile.save(target_dir / f'{id_value}.png', compress_level=0)
+    tile.save(target_dir / f'{id_value}.png', compress_level=3)
 
 def write_tiles(id_values, tiles, target_dir):
-    pool = Pool(4) # 4 processes
+    pool = Pool(6) # 6 threads seems to work best
     for id_value, tile in zip(id_values, tiles):
         pool.apply_async(tile_writer, args=(id_value, tile, target_dir))
     pool.close()
@@ -221,13 +223,14 @@ def write_tiles(id_values, tiles, target_dir):
 def generate_dataset():
     # Copy the images to the target directory
     print('Generating images and generating label files...')
+    print('Dataset location:', TARGET_DIR)
     for i, image in enumerate(tqdm(GEN_IMAGES)):
         id_names, tiles, label_files = create_bbox_label_file(image)
         if i < NUM_TRAIN:
             write_label_files(id_names, label_files, TARGET_TRAIN_LABEL_DIR)
-            start_time = time.time()
+            if DEBUG: start_time = time.time()
             write_tiles(id_names, tiles, TARGET_TRAIN_IMG_DIR)
-            print(f"time to write tiles: {time.time() - start_time}")
+            if DEBUG: print(f"time to write tiles: {time.time() - start_time}")
         elif i < NUM_TRAIN + NUM_VALID:
             write_label_files(id_names, label_files, TARGET_VALID_LABEL_DIR)
             write_tiles(id_names, tiles, TARGET_VALID_IMG_DIR)
