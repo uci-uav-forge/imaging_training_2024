@@ -10,79 +10,81 @@ import math
 import time
 from multiprocessing import Pool
 
-# Reduces the dataset to a smaller size for testing (50 images)
-DEBUG = True
+if __name__ == '__main__':
+    # Reduces the dataset to a smaller size for testing (50 images)
+    DEBUG = True
 
-# Create the target directory
-version_number = 1
+    # Create the target directory
+    version_number = 1
 
-if CREATE_NEW_VERSION:
-    while (TARGET_DIR / f'DATASETv{version_number}').exists():
-        version_number += 1
+    if CREATE_NEW_VERSION:
+        while (TARGET_DIR / f'DATASETv{version_number}').exists():
+            version_number += 1
 
-TARGET_DIR = TARGET_DIR / f'DATASETv{version_number}'
+    TARGET_DIR = TARGET_DIR / f'DATASETv{version_number}'
 
-# Create the target directory
-if TARGET_DIR.exists():
-    print(f'Warning: Target directory {TARGET_DIR} already exists. Overwriting.')
-    data = input('Enter "yes" to confirm deletion...')
-    if data == 'yes':
-        shutil.rmtree(TARGET_DIR, ignore_errors=True)
-    else:
-        print('Aborting...')
-        exit()
 
-TARGET_DIR.mkdir(parents=True)
+    # Create the target directory
+    if TARGET_DIR.exists():
+        print(f'Warning: Target directory {TARGET_DIR} already exists. Overwriting.')
+        data = input('Enter "yes" to confirm deletion...')
+        if data == 'yes':
+            shutil.rmtree(TARGET_DIR, ignore_errors=True)
+        else:
+            print('Aborting...')
+            exit()
 
-# Create the subdirectories
-TARGET_TEST_DIR = TARGET_DIR / 'test'
-TARGET_TRAIN_DIR = TARGET_DIR / 'train'
-TARGET_VALID_DIR = TARGET_DIR / 'valid'
+    TARGET_DIR.mkdir(parents=True)
 
-# Create the subdirectories for each class
-TARGET_TEST_IMG_DIR = TARGET_TEST_DIR / 'images'
-TARGET_TEST_LABEL_DIR = TARGET_TEST_DIR / 'labels'
+    # Create the subdirectories
+    TARGET_TEST_DIR = TARGET_DIR / 'test'
+    TARGET_TRAIN_DIR = TARGET_DIR / 'train'
+    TARGET_VALID_DIR = TARGET_DIR / 'valid'
 
-TARGET_TRAIN_IMG_DIR = TARGET_TRAIN_DIR / 'images'
-TARGET_TRAIN_LABEL_DIR = TARGET_TRAIN_DIR / 'labels'
+    # Create the subdirectories for each class
+    TARGET_TEST_IMG_DIR = TARGET_TEST_DIR / 'images'
+    TARGET_TEST_LABEL_DIR = TARGET_TEST_DIR / 'labels'
 
-TARGET_VALID_IMG_DIR = TARGET_VALID_DIR / 'images'
-TARGET_VALID_LABEL_DIR = TARGET_VALID_DIR / 'labels'
+    TARGET_TRAIN_IMG_DIR = TARGET_TRAIN_DIR / 'images'
+    TARGET_TRAIN_LABEL_DIR = TARGET_TRAIN_DIR / 'labels'
 
-TARGET_TEST_IMG_DIR.mkdir(parents=True)
-TARGET_TEST_LABEL_DIR.mkdir(parents=True)
+    TARGET_VALID_IMG_DIR = TARGET_VALID_DIR / 'images'
+    TARGET_VALID_LABEL_DIR = TARGET_VALID_DIR / 'labels'
 
-TARGET_TRAIN_IMG_DIR.mkdir(parents=True)
-TARGET_TRAIN_LABEL_DIR.mkdir(parents=True)
+    TARGET_TEST_IMG_DIR.mkdir(parents=True)
+    TARGET_TEST_LABEL_DIR.mkdir(parents=True)
 
-TARGET_VALID_IMG_DIR.mkdir(parents=True)
-TARGET_VALID_LABEL_DIR.mkdir(parents=True)
+    TARGET_TRAIN_IMG_DIR.mkdir(parents=True)
+    TARGET_TRAIN_LABEL_DIR.mkdir(parents=True)
 
-# Determine the amount of images
+    TARGET_VALID_IMG_DIR.mkdir(parents=True)
+    TARGET_VALID_LABEL_DIR.mkdir(parents=True)
 
-GEN_IMAGES = list(IMAGES_DIR.glob('[!.]*.png'))
-NUM_IMAGES = len(GEN_IMAGES)
-print(f'Found {NUM_IMAGES} images')
+    # Determine the amount of images
 
-'''########################################################'''
-# Shorten the set for testing -------------------------------
-if DEBUG:
-    NUM_IMAGES = 50
-    GEN_IMAGES = GEN_IMAGES[:NUM_IMAGES]
-# ------------------------------------------------------------
+    GEN_IMAGES = list(IMAGES_DIR.glob('[!.]*.png'))
+    NUM_IMAGES = len(GEN_IMAGES)
+    print(f'Found {NUM_IMAGES} images')
 
-# Determine the amount of images to use for training and validation
-TRAIN_PERCENTAGE = 0.8
-VALID_PERCENTAGE = 0.15
-TEST_PERCENTAGE = 0.05
+    '''########################################################'''
+    # Shorten the set for testing -------------------------------
+    if DEBUG:
+        NUM_IMAGES = 50
+        GEN_IMAGES = GEN_IMAGES[:NUM_IMAGES]
+    # ------------------------------------------------------------
 
-NUM_TRAIN = int(NUM_IMAGES * TRAIN_PERCENTAGE)
-NUM_VALID = int(NUM_IMAGES * VALID_PERCENTAGE)
-NUM_TEST = NUM_IMAGES - NUM_TRAIN - NUM_VALID
+    # Determine the amount of images to use for training and validation
+    TRAIN_PERCENTAGE = 0.8
+    VALID_PERCENTAGE = 0.15
+    TEST_PERCENTAGE = 0.05
 
-print(f'Using {NUM_TRAIN} images for training, {NUM_VALID} images for validation, and {NUM_TEST} images for testing')
+    NUM_TRAIN = int(NUM_IMAGES * TRAIN_PERCENTAGE)
+    NUM_VALID = int(NUM_IMAGES * VALID_PERCENTAGE)
+    NUM_TEST = NUM_IMAGES - NUM_TRAIN - NUM_VALID
 
-found_classes = {}
+    print(f'Using {NUM_TRAIN} images for training, {NUM_VALID} images for validation, and {NUM_TEST} images for testing')
+
+    found_classes = {}
 
 def get_file_id(path_to_file : Path):
     # RGB files are named like this: 'rgb_000000.png'
@@ -207,7 +209,7 @@ def write_label_files(id_values, label_files, target_dir):
             f.write(label_file)
 
 def tile_writer(id_value, tile, target_dir):
-    tile.save(target_dir / f'{id_value}.png')
+    tile.save(target_dir / f'{id_value}.png', compress_level=0)
 
 def write_tiles(id_values, tiles, target_dir):
     pool = Pool(4) # 4 processes
@@ -216,22 +218,25 @@ def write_tiles(id_values, tiles, target_dir):
     pool.close()
     pool.join()
 
-# Copy the images to the target directory
-print('Generating images and generating label files...')
-for i, image in enumerate(tqdm(GEN_IMAGES)):
-    id_names, tiles, label_files = create_bbox_label_file(image)
-    if i < NUM_TRAIN:
-        write_label_files(id_names, label_files, TARGET_TRAIN_LABEL_DIR)
-        write_tiles(id_names, tiles, TARGET_TRAIN_IMG_DIR)
-    elif i < NUM_TRAIN + NUM_VALID:
-        write_label_files(id_names, label_files, TARGET_VALID_LABEL_DIR)
-        write_tiles(id_names, tiles, TARGET_VALID_IMG_DIR)
-    else:
-        write_label_files(id_names, label_files, TARGET_TEST_LABEL_DIR)
-        write_tiles(id_names, tiles, TARGET_TEST_IMG_DIR)
+def generate_dataset():
+    # Copy the images to the target directory
+    print('Generating images and generating label files...')
+    for i, image in enumerate(tqdm(GEN_IMAGES)):
+        id_names, tiles, label_files = create_bbox_label_file(image)
+        if i < NUM_TRAIN:
+            write_label_files(id_names, label_files, TARGET_TRAIN_LABEL_DIR)
+            start_time = time.time()
+            write_tiles(id_names, tiles, TARGET_TRAIN_IMG_DIR)
+            print(f"time to write tiles: {time.time() - start_time}")
+        elif i < NUM_TRAIN + NUM_VALID:
+            write_label_files(id_names, label_files, TARGET_VALID_LABEL_DIR)
+            write_tiles(id_names, tiles, TARGET_VALID_IMG_DIR)
+        else:
+            write_label_files(id_names, label_files, TARGET_TEST_LABEL_DIR)
+            write_tiles(id_names, tiles, TARGET_TEST_IMG_DIR)
 
-print('Done generating data!')
-print("Now making data.yaml file...")
+    print('Done generating data!')
+    print("Now making data.yaml file...")
 
 # Create the data.yaml file
 
@@ -257,7 +262,9 @@ def create_data_yaml_file():
     with open(TARGET_DIR / 'data.yaml', 'w') as f:
         f.writelines(data_yaml)
 
-create_data_yaml_file()
+if __name__ == '__main__':
+    generate_dataset()
+    create_data_yaml_file()
 
-print('Done!')
+    print('Done!')
 
