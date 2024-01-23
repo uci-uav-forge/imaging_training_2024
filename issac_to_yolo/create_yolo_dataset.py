@@ -6,10 +6,12 @@ from io import StringIO
 from PIL import Image
 from tqdm import tqdm
 from yolo_config import *
+import math
+import time
+from multiprocessing import Pool
 
-
+# Reduces the dataset to a smaller size for testing (50 images)
 DEBUG = True
-
 
 # Create the target directory
 version_number = 1
@@ -102,8 +104,33 @@ def get_file_by_id(id, root_dir : Path):
             return file
     return None
 
-def create_bbox_label_file(image_path : Path):
+def determineOverlap(section : int, total_length : int) -> tuple():
+    amount = math.ceil(total_length / section)
+    overlap = int(((amount * section) - total_length) / (amount-1))
+    return (amount, overlap)
 
+def sliceImage(image_arr : np.array, tileSize : int) -> list[Image.Image]:
+    height, width, channels = image_arr.shape
+    height_amount, height_overlap = determineOverlap(tileSize, height)
+    width_amount, width_overlap = determineOverlap(tileSize, width)
+
+    tiles = []
+    pos_data = []
+    for i in range(height_amount):
+        for j in range(width_amount):
+
+            y_start = i*(tileSize-height_overlap)
+            y_end = y_start+tileSize
+
+            x_start = j*(tileSize-width_overlap)
+            x_end = x_start+tileSize
+
+            tiles.append(Image.fromarray(image_arr[y_start:y_end, x_start:x_end]))
+            pos_data.append([x_start, y_start, x_end, y_end])
+
+    return tiles, pos_data
+
+def create_bbox_label_file(image_path : Path):
     # Get the image id
     id_value = get_file_id(image_path)
 
@@ -114,55 +141,94 @@ def create_bbox_label_file(image_path : Path):
     with open(label_pos, 'rb') as label_pos_file:
         label_pos_data = np.load(label_pos_file)
 
-    # Get the image dimensions
-    img = Image.open(image_path).convert('RGB')
+    # Get the image and convert it to an array
+    img = Image.open(image_path)
     image = np.array(img)
-    image_height = image.shape[0]
-    image_width = image.shape[1]
+    
+    # Slice the image
+    tiles, tile_pos_data = sliceImage(image, TILE_SIZE) #0.03 seconds
+    label_files = []
+    # Create a bbox label file for each tile
+    for pos_data in tile_pos_data:
+        # Create temp file
+        tempFile = StringIO()
 
-    # Create temp file
-    tempFile = StringIO()
+        # translate label position data to yolo format
+        # yolo format: <object-class> <x_center> <y_center> <width> <height>
+        # entry format: <object-class> <x1> <y1> <x2> <y2>
 
-    # translate label position data to yolo format
-    # yolo format: <object-class> <x_center> <y_center> <width> <height>
-    # entry format: <object-class> <x1> <y1> <x2> <y2>
-    for entry in label_pos_data:
-        if str(entry[0]) not in found_classes.keys():
-             # Load the class label data
-            class_label = get_file_by_id(id_value, BOXES_LEGEND_DIR) #json type
-            with open(class_label) as class_label_file:
-                class_label_data = json.load(class_label_file)
-            found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
+        # For each entry in the original label position data we need to check all the tiles to see if it is in the tile
+        for entry in label_pos_data:
+            if str(entry[0]) not in found_classes.keys():
+                # Load the class label data
+                class_label = get_file_by_id(id_value, BOXES_LEGEND_DIR) #json type
+                with open(class_label) as class_label_file:
+                    class_label_data = json.load(class_label_file)
+                found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
 
-        if entry[0] != 0:
-            # Calculate the yolo format values
-            x_center = ((entry[1] + entry[3]) / 2) / image_width
-            y_center = ((entry[2] + entry[4]) / 2) / image_height
-            width = (entry[3] - entry[1]) / image_width
-            height = (entry[4] - entry[2]) / image_height
+            if entry[0] != 0:
+                # pos_data: [x_start, y_start, x_end, y_end]
+                # entry format: <object-class> <x1> <y1> <x2> <y2>
+                # Check if at least one of the points are in the tile
+                if ((pos_data[0] <= entry[1] <= pos_data[2] and pos_data[1] <= entry[2] <= pos_data[3])
+                or (pos_data[0] <= entry[3] <= pos_data[2] and pos_data[1] <= entry[4] <= pos_data[3])):
+                    # Means that a point is in the tile
 
-            # Write the yolo format values to the temp file
-            tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
-        
-    return id_value, tempFile.getvalue()
+                    def constrain(val, min_val, max_val):
+                        return min(max_val, max(min_val, val))
 
-def write_label_file(id_value, label_file, target_dir):
-    with open(target_dir / f'{id_value}.txt', 'w') as f:
-        f.write(label_file)
+                    # Constrain the values to be within the tile
+                    entry[1] = constrain(entry[1], pos_data[0], pos_data[2])
+                    entry[2] = constrain(entry[2], pos_data[1], pos_data[3])
+                    entry[3] = constrain(entry[3], pos_data[0], pos_data[2])
+                    entry[4] = constrain(entry[4], pos_data[1], pos_data[3])
+
+                    # Translate the values to be relative to the tile
+                    entry[1] -= pos_data[0]
+                    entry[2] -= pos_data[1]
+                    entry[3] -= pos_data[0]
+                    entry[4] -= pos_data[1]
+
+                    # Calculate the yolo format values
+                    x_center = ((entry[1] + entry[3]) / 2) / TILE_SIZE
+                    y_center = ((entry[2] + entry[4]) / 2) / TILE_SIZE
+                    width = (entry[3] - entry[1]) / TILE_SIZE
+                    height = (entry[4] - entry[2]) / TILE_SIZE
+
+                    # Write the yolo format values to the temp file
+                    tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
+        label_files.append(tempFile.getvalue())
+    names = [id_value+'_'+str(i) for i in range(len(tiles))]
+    return names, tiles, label_files
+
+def write_label_files(id_values, label_files, target_dir):
+    for id_value, label_file in zip(id_values, label_files):
+        with open(target_dir / f'{id_value}.txt', 'w') as f:
+            f.write(label_file)
+
+def tile_writer(id_value, tile, target_dir):
+    tile.save(target_dir / f'{id_value}.png')
+
+def write_tiles(id_values, tiles, target_dir):
+    pool = Pool(4) # 4 processes
+    for id_value, tile in zip(id_values, tiles):
+        pool.apply_async(tile_writer, args=(id_value, tile, target_dir))
+    pool.close()
+    pool.join()
 
 # Copy the images to the target directory
-print('Copying images and generating label files...')
+print('Generating images and generating label files...')
 for i, image in enumerate(tqdm(GEN_IMAGES)):
-    id_name, label_file = create_bbox_label_file(image)
+    id_names, tiles, label_files = create_bbox_label_file(image)
     if i < NUM_TRAIN:
-        write_label_file(id_name, label_file, TARGET_TRAIN_LABEL_DIR)
-        shutil.copy(image, TARGET_TRAIN_IMG_DIR / (id_name+'.png'))
+        write_label_files(id_names, label_files, TARGET_TRAIN_LABEL_DIR)
+        write_tiles(id_names, tiles, TARGET_TRAIN_IMG_DIR)
     elif i < NUM_TRAIN + NUM_VALID:
-        write_label_file(id_name, label_file, TARGET_VALID_LABEL_DIR)
-        shutil.copy(image, TARGET_VALID_IMG_DIR / (id_name+'.png'))
+        write_label_files(id_names, label_files, TARGET_VALID_LABEL_DIR)
+        write_tiles(id_names, tiles, TARGET_VALID_IMG_DIR)
     else:
-        write_label_file(id_name, label_file, TARGET_TEST_LABEL_DIR)
-        shutil.copy(image, TARGET_TEST_IMG_DIR / (id_name+'.png'))
+        write_label_files(id_names, label_files, TARGET_TEST_LABEL_DIR)
+        write_tiles(id_names, tiles, TARGET_TEST_IMG_DIR)
 
 print('Done generating data!')
 print("Now making data.yaml file...")

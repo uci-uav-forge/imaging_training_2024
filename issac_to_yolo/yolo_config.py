@@ -11,6 +11,7 @@ DATASET_FORMAT = 'bbox'
 # If True, will create a new version of the dataset. Otherwise, will overwrite the existing one
 CREATE_NEW_VERSION = False 
 
+TILE_SIZE = 640 # The size of the tiles to be created
 #---------------------------
 
 #-------ISSAC PARAMS--------
