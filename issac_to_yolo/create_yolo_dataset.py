@@ -7,6 +7,10 @@ from PIL import Image
 from tqdm import tqdm
 from yolo_config import *
 
+
+DEBUG = True
+
+
 # Create the target directory
 version_number = 1
 
@@ -60,8 +64,9 @@ print(f'Found {NUM_IMAGES} images')
 
 '''########################################################'''
 # Shorten the set for testing -------------------------------
-#NUM_IMAGES = 50
-#GEN_IMAGES = GEN_IMAGES[:NUM_IMAGES]
+if DEBUG:
+    NUM_IMAGES = 50
+    GEN_IMAGES = GEN_IMAGES[:NUM_IMAGES]
 # ------------------------------------------------------------
 
 # Determine the amount of images to use for training and validation
@@ -120,6 +125,7 @@ def create_bbox_label_file(image_path : Path):
 
     # translate label position data to yolo format
     # yolo format: <object-class> <x_center> <y_center> <width> <height>
+    # entry format: <object-class> <x1> <y1> <x2> <y2>
     for entry in label_pos_data:
         if str(entry[0]) not in found_classes.keys():
              # Load the class label data
@@ -128,15 +134,16 @@ def create_bbox_label_file(image_path : Path):
                 class_label_data = json.load(class_label_file)
             found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
 
-        # Calculate the yolo format values
-        x_center = ((entry[1] + entry[3]) / 2) / image_width
-        y_center = ((entry[2] + entry[4]) / 2) / image_height
-        width = (entry[3] - entry[1]) / image_width
-        height = (entry[4] - entry[2]) / image_height
+        if entry[0] != 0:
+            # Calculate the yolo format values
+            x_center = ((entry[1] + entry[3]) / 2) / image_width
+            y_center = ((entry[2] + entry[4]) / 2) / image_height
+            width = (entry[3] - entry[1]) / image_width
+            height = (entry[4] - entry[2]) / image_height
 
-        # Write the yolo format values to the temp file
-        tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
-    
+            # Write the yolo format values to the temp file
+            tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
+        
     return id_value, tempFile.getvalue()
 
 def write_label_file(id_value, label_file, target_dir):
@@ -178,7 +185,7 @@ def create_data_yaml_file():
     "train: ../train/images\n",
     "val: ../valid/images\n",
     "test: ../test/images\n\n",
-    f"nc: {number_of_classes}\n",
+    f"nc: {number_of_classes+1}\n",
     f"names: {classes}\n"
     ]
     with open(TARGET_DIR / 'data.yaml', 'w') as f:
