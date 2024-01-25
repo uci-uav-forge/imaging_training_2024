@@ -13,7 +13,7 @@ from multiprocessing.pool import ThreadPool as Pool #(for threads)
 
 if __name__ == '__main__':
     # Reduces the dataset to a smaller size for testing (50 images)
-    DEBUG = True
+    DEBUG = False
 
     # Create the target directory
     version_number = 1
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     # Determine the amount of images
 
-    GEN_IMAGES = list(IMAGES_DIR.glob('[!.]*.png'))
+    GEN_IMAGES = list(DATA_DIR.glob('rgb*.png'))
     NUM_IMAGES = len(GEN_IMAGES)
     print(f'Found {NUM_IMAGES} images')
 
@@ -96,12 +96,25 @@ def get_file_id(path_to_file : Path):
     # Thus the file id is the number after the underscore
     return path_to_file.stem.split('_')[-1]
 
-def get_file_by_id(id, root_dir : Path):
+def get_file_by_id(id, type, root_dir : Path = None):
     # Returns the file with the given id from the given root directory
     # The file id is the number after the underscore
     id = str(id)
-    files = list(root_dir.glob('[!.]*'))
-    #files = [get_file_id(file) for file in files]
+    if root_dir is None:
+        root_dir = DATA_DIR
+        if type == 'rgb':
+            files = list(root_dir.glob('rgb*.png'))
+        elif type == 'semantic':
+            files = list(root_dir.glob('semantic_segmentation*.png'))
+        elif type == 'semantic_legend':
+            files = list(root_dir.glob('semantic_segmentation_labels*.json'))
+        elif type == 'bbox_legend':
+            files = list(root_dir.glob('bounding_box*.json'))
+        elif type == 'bbox_pos':
+            files = list(root_dir.glob('bounding_box*.npy'))
+    else:
+        files = list(root_dir.glob('[!.]*'))
+
     for file in files:
         if get_file_id(file) == id:
             return file
@@ -138,7 +151,7 @@ def create_bbox_label_file(image_path : Path):
     id_value = get_file_id(image_path)
 
     # Create a bbox label file for the given image id
-    label_pos = get_file_by_id(id_value, BOXES_DIR) #npy type
+    label_pos = get_file_by_id(id_value, "bbox_pos") #npy type
     
     # Load the label position data
     with open(label_pos, 'rb') as label_pos_file:
@@ -164,7 +177,7 @@ def create_bbox_label_file(image_path : Path):
         for entry in label_pos_data:
             if str(entry[0]) not in found_classes.keys():
                 # Load the class label data
-                class_label = get_file_by_id(id_value, BOXES_LEGEND_DIR) #json type
+                class_label = get_file_by_id(id_value, 'bbox_legend') #json type
                 with open(class_label) as class_label_file:
                     class_label_data = json.load(class_label_file)
                 found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
@@ -250,7 +263,7 @@ def create_data_yaml_file():
     keys_of_classes = list(found_classes.keys())
     keys_of_classes = [int(key) for key in keys_of_classes]
     number_of_classes = max(keys_of_classes)
-    print(f'Found {number_of_classes} classes')
+    print(f'Found {number_of_classes+1} classes')
     classes = [0]*(number_of_classes+1)
     for i in range(number_of_classes+1):
         classes[i] = found_classes.get(str(i), "UNKNOWN CLASS")

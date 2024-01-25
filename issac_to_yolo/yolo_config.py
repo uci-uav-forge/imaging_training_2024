@@ -17,21 +17,5 @@ TILE_SIZE = 640 # The size of the tiles to be created
 #-------ISSAC PARAMS--------
 
 # The directory containing the ISSAC dataset
-DATA_DIR = Path('/Volumes/SANDISK/Issac_data')
-
-# The directory containing the ISSAC train images (.png)
-IMAGES_DIR = DATA_DIR / 'train'
-
-# The directory containing the ISSAC semantic masks (.png)
-SEMANTIC_MASKS_DIR = DATA_DIR / 'semantic_masks'
-
-# The directory containing the ISSAC semantic labels (.json)
-SEMANTIC_LEGEND_DIR = DATA_DIR / 'semantic_labels'
-
-# The directory containing the ISSAC bounding box positions (.npy)
-BOXES_DIR = DATA_DIR / 'bounding_box_labels/bbox_labels'
-
-# The directory containing the ISSAC bounding box labels (.json)
-BOXES_LEGEND_DIR = DATA_DIR / 'bounding_box_labels/bbox_class_labels'
-
+DATA_DIR = Path('/Volumes/SANDISK/Issac_data/Main')
 # --------------------------
