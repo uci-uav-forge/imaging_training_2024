@@ -12,18 +12,16 @@ import time
 from multiprocessing.pool import ThreadPool as Pool #(for threads)
 
 if __name__ == '__main__':
-    # Reduces the dataset to a smaller size for testing (50 images)
-    DEBUG = False
-
     # Create the target directory
     version_number = 1
 
-    if CREATE_NEW_VERSION:
-        while (TARGET_DIR / f'DATASETv{version_number}').exists():
-            version_number += 1
+    while (TARGET_DIR / f'DATASETv{version_number}').exists():
+        version_number += 1
 
+    if not CREATE_NEW_VERSION and version_number > 1:
+        version_number -= 1
+        
     TARGET_DIR = TARGET_DIR / f'DATASETv{version_number}'
-
 
     # Create the target directory
     if TARGET_DIR.exists():
@@ -35,6 +33,7 @@ if __name__ == '__main__':
             print('Aborting...')
             exit()
 
+    print(f'Creating target directory {TARGET_DIR}')
     TARGET_DIR.mkdir(parents=True)
 
     # Create the subdirectories
@@ -83,7 +82,11 @@ if __name__ == '__main__':
     NUM_VALID = int(NUM_IMAGES * VALID_PERCENTAGE)
     NUM_TEST = NUM_IMAGES - NUM_TRAIN - NUM_VALID
 
+    height, width, channels = np.array(Image.open(GEN_IMAGES[0])).shape
+    gen_per_image = math.ceil(height / TILE_SIZE) * math.ceil(width / TILE_SIZE)
+
     print(f'Using {NUM_TRAIN} images for training, {NUM_VALID} images for validation, and {NUM_TEST} images for testing')
+    print(f'Each image will be split into {gen_per_image} tiles')
 
     found_classes = {}
 
