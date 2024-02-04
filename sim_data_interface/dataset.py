@@ -145,5 +145,5 @@ if __name__ == "__main__":
     axs[2].set_title("Image with bounding boxes")
     
     plt.show()
-    figs.savefig("example.png", dpi=600, bbox_inches='tight')
+    #figs.savefig("example.png", dpi=600, bbox_inches='tight')
     
