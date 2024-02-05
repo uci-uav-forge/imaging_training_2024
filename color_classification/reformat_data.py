@@ -30,6 +30,7 @@ for photo_file in photo_files[0:100]:
 
             new_photo_file = f'cropped_bbox_{i}_{photo_file}'
             new_photo_path = os.path.join('./output', new_photo_file)
+            # Resize to 128x128
             cropped_photo.save(new_photo_path)
         except Exception:
             pass
