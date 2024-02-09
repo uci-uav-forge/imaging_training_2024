@@ -3,12 +3,12 @@ import random
 COLOR_TO_LABEL_DICT = {
     "red": 0,
     "orange": 1,
-    "green": 3,
-    "blue": 4,
-    "purple": 5,
-    "white": 6,
-    "black": 7,
-    "brown": 8,
+    "green": 2,
+    "blue": 3,
+    "purple": 4,
+    "white": 5,
+    "black": 6,
+    "brown": 7,
 }
 
 

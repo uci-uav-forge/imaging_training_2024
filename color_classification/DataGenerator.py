@@ -2,13 +2,6 @@ import pygame
 import os
 import math
 ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"
-COLORS_TO_RGB = {
-    'red': (255, 0, 0),
-    'green': (0, 255, 0),
-    'blue': (0, 0, 255),
-    'orange': (255, 165, 0),
-    'purple': (200, 0, 200),
-}
 import random
 class DataGenerator():
     
@@ -19,9 +12,9 @@ class DataGenerator():
         self.screen = pygame.display.set_mode([self.resolution,resolution])
         self.colors = {
             "red":(200,40,0),
+            "orange" : (217,101,13),
             "green": (53,194,41),
             "blue": (41,87,194),
-            "orange" : (217,101,13),
             "purple": (127,41,194),
             'white': (255, 255, 255),
             'black': (0, 0, 0),
@@ -89,7 +82,7 @@ class DataGenerator():
                         screen.blit(letter, textRect)
                         pygame.display.flip()
                         pygame.image.save(screen, f".{self.path}/dataset/data/{startNum}.jpg")
-                        file.write(f"./data/{startNum}.jpg" + ", " + str(letter_index) +", " + str(shape_index) + "\n")
+                        file.write(f".{self.path}/dataset/data/{startNum}.jpg" + ", " + str(letter_index) +", " + str(shape_index) + "\n")
                         startNum += 1
         return startNum
 
