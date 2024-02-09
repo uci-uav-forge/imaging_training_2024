@@ -62,9 +62,9 @@ class ColorModel(nn.Module):
 
 if __name__ == "__main__":
     num_classes = 8
-    learning_rate = 0.00001
+    learning_rate = 0.0001
     batch_size = 24
-    epochs = 10
+    epochs = 3
 
     transform = transforms.Compose([
         transforms.Resize((128, 128)),
