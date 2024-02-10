@@ -112,9 +112,9 @@ def get_file_by_id(id, type, root_dir : Path = None):
         elif type == 'semantic_legend':
             files = list(root_dir.glob('semantic_segmentation_labels*.json'))
         elif type == 'bbox_legend':
-            files = list(root_dir.glob('bounding_box*.json'))
+            files = list(root_dir.glob('bounding_box_2d_tight_labels*.json'))
         elif type == 'bbox_pos':
-            files = list(root_dir.glob('bounding_box*.npy'))
+            files = list(root_dir.glob('bounding_box_2d_tight*.npy'))
     else:
         files = list(root_dir.glob('[!.]*'))
 
@@ -123,7 +123,7 @@ def get_file_by_id(id, type, root_dir : Path = None):
             return file
     return None
 
-def determineOverlap(section : int, total_length : int) -> tuple():
+def determineOverlap(section : int, total_length : int) -> tuple:
     amount = math.ceil(total_length / section)
     overlap = int(((amount * section) - total_length) / (amount-1))
     return (amount, overlap)
