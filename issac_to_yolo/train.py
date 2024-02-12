@@ -10,8 +10,8 @@ else:
     raise NotImplementedError
     
 model.train(
-    data='/home/eesh/forge/YOLO_DATASET/DATASETv2/data.yaml', 
-    epochs=100,
+    data='/home/eesh/forge/YOLO_DATASET/DATASETv3/data.yaml', 
+    epochs=200,
     workers=16, 
     save=True,
     cos_lr=True,

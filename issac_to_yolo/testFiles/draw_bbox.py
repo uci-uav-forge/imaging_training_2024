@@ -10,7 +10,7 @@ import numpy as np
 ISSAC_DIR = Path('/home/eesh/forge/issac_datasets/minh-0208/main/sub_main')
 
 # Where the Yolo Dataset is stored
-YOLO_DIR = Path('/home/eesh/forge/YOLO_DATASET/DATASETv4')
+YOLO_DIR = Path('/home/eesh/forge/YOLO_DATASET/DATASETv9')
 
 SUBFOLDER = 'train'
 # The directory containing the images and labels

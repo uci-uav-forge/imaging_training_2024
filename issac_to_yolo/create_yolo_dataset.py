@@ -168,7 +168,8 @@ def create_bbox_label_file(image_path : Path):
     tiles, tile_pos_data = sliceImage(image, TILE_SIZE) #0.03 seconds
     label_files = []
     # Create a bbox label file for each tile
-    for pos_data in tile_pos_data:
+    # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
+    for tile_xmin, tile_ymin, tile_xmax, tile_ymax in tile_pos_data:
         # Create temp file
         tempFile = StringIO()
 
@@ -178,45 +179,48 @@ def create_bbox_label_file(image_path : Path):
 
         # For each entry in the original label position data we need to check all the tiles to see if it is in the tile
         for entry in label_pos_data:
-            if str(entry[0]) not in found_classes.keys():
+
+            cls, x1, y1, x2, y2, rot = entry
+
+            if str(cls) not in found_classes.keys():
                 # Load the class label data
                 class_label = get_file_by_id(id_value, 'bbox_legend') #json type
                 with open(class_label) as class_label_file:
                     class_label_data = json.load(class_label_file)
-                found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
+                found_classes[str(cls)] = class_label_data[str(cls)]["class"]
 
-            if entry[0] != 0:
-                # pos_data: [x_start, y_start, x_end, y_end] per tile
+            if cls != 0:
+                # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
                 # Check if at least one of the points are in the tile
-                if ((pos_data[0] <= entry[1] <= pos_data[2] and pos_data[1] <= entry[2] <= pos_data[3])
-                or (pos_data[0] <= entry[3] <= pos_data[2] and pos_data[1] <= entry[4] <= pos_data[3])):
+                if ((tile_xmin <= x1 <= tile_xmax and tile_ymin <= y1 <= tile_ymax)
+                or (tile_xmin <= x2 <= tile_xmax and tile_ymin <= y2 <= tile_ymax)):
                     # Means that a point is in the tile
 
                     def constrain(val, min_val, max_val):
                         return min(max_val, max(min_val, val))
 
                     # Constrain the values to be within the tile
-                    entry[1] = constrain(entry[1], pos_data[0], pos_data[2])
-                    entry[2] = constrain(entry[2], pos_data[1], pos_data[3])
-                    entry[3] = constrain(entry[3], pos_data[0], pos_data[2])
-                    entry[4] = constrain(entry[4], pos_data[1], pos_data[3])
+                    x1 = constrain(x1, tile_xmin, tile_xmax)
+                    y1 = constrain(y1, tile_ymin, tile_ymax)
+                    x2 = constrain(x2, tile_xmin, tile_xmax)
+                    y2 = constrain(y2, tile_ymin, tile_ymax)
 
                     # Translate the values to be relative to the tile
-                    entry[1] -= pos_data[0]
-                    entry[2] -= pos_data[1]
-                    entry[3] -= pos_data[0]
-                    entry[4] -= pos_data[1]
+                    x1 -= tile_xmin
+                    y1 -= tile_ymin
+                    x2 -= tile_xmin
+                    y2 -= tile_ymin
 
                     # Calculate the yolo format values
-                    x_center = ((entry[1] + entry[3]) / 2) / TILE_SIZE
-                    y_center = ((entry[2] + entry[4]) / 2) / TILE_SIZE
-                    width = (entry[3] - entry[1]) / TILE_SIZE
-                    height = (entry[4] - entry[2]) / TILE_SIZE
+                    x_center = ((x1 + x2) / 2) / TILE_SIZE
+                    y_center = ((y1 + y2) / 2) / TILE_SIZE
+                    width = (x2 - x1) / TILE_SIZE
+                    height = (y2 - y1) / TILE_SIZE
 
                     # Write the yolo format values to the temp file
-                    if DEBUG: tempFile.write(f"{entry}\n")
-                    tempFile.write(f'{entry[0]} {x_center} {y_center} {width} {height}\n')
+                    if DEBUG: tempFile.write(f"({cls} {x1} {y1} {x2} {y2})\n")
+                    tempFile.write(f'{cls} {x_center} {y_center} {width} {height}\n')
         label_files.append(tempFile.getvalue())
     names = [id_value+'_'+str(i) for i in range(len(tiles))]
     return names, tiles, label_files
