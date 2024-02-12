@@ -4,6 +4,10 @@
 
 import cv2
 from pathlib import Path
+import numpy as np
+
+# Where the issac dataset is stored
+ISSAC_DIR = Path('/home/eesh/forge/issac_datasets/minh-0208/main/sub_main')
 
 # Where the Yolo Dataset is stored
 YOLO_DIR = Path('/home/eesh/forge/YOLO_DATASET/DATASETv4')
@@ -13,8 +17,15 @@ SUBFOLDER = 'train'
 IMAGE_DIR = YOLO_DIR / SUBFOLDER / 'images'
 LABEL_DIR = YOLO_DIR / SUBFOLDER / 'labels'
 
-for img_file in IMAGE_DIR.glob("*.png"):
+files  = list(IMAGE_DIR.glob("*.png"))
+files.sort()
+
+for img_file in files:
     img = cv2.imread(str(img_file))
+    name = "rgb_"+img_file.stem[:-2]+".png"
+    box_file = "bounding_box_2d_tight_"+img_file.stem[:-2]+".npy"
+    box_data = np.load(ISSAC_DIR / box_file)
+    issac_img = cv2.imread(str(ISSAC_DIR / name))
     raw_image = img.copy()
     label_file = LABEL_DIR / (img_file.stem + ".txt")
     with open(label_file, 'r') as f:
@@ -36,8 +47,15 @@ for img_file in IMAGE_DIR.glob("*.png"):
                 y2 = int((y + h/2) * img.shape[0])
                 print(img_file.stem, cls, x1, y1, x2, y2)
                 img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    for box in box_data:
+        cls, x1, y1, x2, y2, rot = box
+        issac_img = cv2.rectangle(issac_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    img = cv2.putText(img, str(img_file.stem), (0, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    raw_image = cv2.putText(raw_image, str(img_file.stem), (0, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    issac_img = cv2.putText(issac_img, str(name), (0, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     cv2.imshow('bbox_image', img)
     cv2.imshow('raw_image', raw_image)
+    cv2.imshow('issac_image', issac_img)
     if cv2.waitKey(0) & 0xFF == ord('q'):
         break
 cv2.destroyAllWindows()

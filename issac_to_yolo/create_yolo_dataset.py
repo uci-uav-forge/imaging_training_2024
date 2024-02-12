@@ -69,7 +69,7 @@ if __name__ == '__main__':
     '''########################################################'''
     # Shorten the set for testing -------------------------------
     if DEBUG:
-        NUM_IMAGES = 50
+        NUM_IMAGES = 100
         GEN_IMAGES = GEN_IMAGES[:NUM_IMAGES]
     # ------------------------------------------------------------
 
@@ -186,7 +186,7 @@ def create_bbox_label_file(image_path : Path):
                 found_classes[str(entry[0])] = class_label_data[str(entry[0])]["class"]
 
             if entry[0] != 0:
-                # pos_data: [x_start, y_start, x_end, y_end]
+                # pos_data: [x_start, y_start, x_end, y_end] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
                 # Check if at least one of the points are in the tile
                 if ((pos_data[0] <= entry[1] <= pos_data[2] and pos_data[1] <= entry[2] <= pos_data[3])
@@ -241,6 +241,10 @@ def generate_dataset():
     print('Generating images and generating label files...')
     print('Dataset location:', TARGET_DIR)
     for i, image in enumerate(tqdm(GEN_IMAGES)):
+        # Temporary to eliminate blury images
+        if int(get_file_id(image)) % 2 == 0:
+            continue
+        #
         id_names, tiles, label_files = create_bbox_label_file(image)
         if i < NUM_TRAIN:
             write_label_files(id_names, label_files, TARGET_TRAIN_LABEL_DIR)
