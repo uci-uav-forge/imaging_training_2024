@@ -1,36 +1,56 @@
 from PIL import Image
 import numpy as np
 import os
+import math
 
-photos_path = './sim_data/train'
-labels_path = './sim_data/bbox_labels'
-
+photos_path = './babyset/train'
+labels_path = './babyset/bbox_labels'
+colors = list({
+    "red":(200,40,0),
+    "green": (53,194,41),
+    "blue": (41,87,194),
+    "orange" : (217,101,13),
+    "purple": (127,41,194),
+    'white': (255, 255, 255),
+    'black': (0, 0, 0),
+    'brown': (165, 42, 42),
+}.keys())
+if not os.path.exists("./output"):
+    os.mkdir("./output")
+    os.mkdir("./output/data")
+    
 photo_files = [f for f in os.listdir(photos_path) if f.endswith('.png')]
+index = 0
+with open("./output/labels.txt", "w") as labels:
+    labels.write("file, letter_color, shape_color\n")
+    for photo_file in photo_files:
+        print(photo_file)
+        photo_path = os.path.join(photos_path, photo_file)
+        photo = Image.open(photo_path)
 
-for photo_file in photo_files[0:100]:
-    photo_path = os.path.join(photos_path, photo_file)
-    photo = Image.open(photo_path)
+        bbox_file = photo_file.replace('.png', '.txt')
+        bbox_path = os.path.join(labels_path, bbox_file)
 
-    bbox_file = 'bounding_box_2d_tight_' + photo_file[4:].replace('.png', '.npy')
-    bbox_path = os.path.join(labels_path, bbox_file)
-    bounding_boxes = np.load(bbox_path)
+        with open(bbox_path, "r") as f:
+            for bbox in f.readlines():
+                print("b", bbox)
+                if len(bbox) == 0:
+                    continue
+                if "person" in bbox:
+                    continue
+                label, _ , shape_color, letter_color, x_max, y_max, x_min, y_min= bbox.split(" ")
+                # x_min = int(x_center - length / 2)
+                # y_min = int(y_center - width / 2)
+                # x_max = int(x_center + length / 2)
+                # y_max = int(y_center + width / 2)
+                print(photo.size)
+                print(x_min)
+                cropped_photo = photo.crop((float(x_min) * 640, float(y_min) * 640, float(x_max)*640, float(y_max) *640)).resize((128,128))
 
-    print(bounding_boxes)
-    for i, bbox in enumerate(bounding_boxes):
-        try:
-            label, x_min, y_min, x_max, y_max, occ_rat = bbox
-            if label == 0:
-                continue
-            # x_min = int(x_center - length / 2)
-            # y_min = int(y_center - width / 2)
-            # x_max = int(x_center + length / 2)
-            # y_max = int(y_center + width / 2)
+                new_photo_file = f'{index}.png'
+                new_photo_path = os.path.join('./output/data/', new_photo_file)
+                labels.write(f"/data/{new_photo_file}, {colors.index(letter_color)}, {colors.index(shape_color)}\n")
+                index+= 1
 
-            cropped_photo = photo.crop((x_min, y_min, x_max, y_max))
-
-            new_photo_file = f'cropped_bbox_{i}_{photo_file}'
-            new_photo_path = os.path.join('./output', new_photo_file)
-            # Resize to 128x128
-            cropped_photo.save(new_photo_path)
-        except Exception:
-            pass
+                # Resize to 128x128
+                cropped_photo.save(new_photo_path)
