@@ -1,0 +1,11 @@
+{
+    "0": "circle",
+    "1": "semicircle",
+    "2": "quartercircle",
+    "3": "triangle",
+    "4": "rectangle",
+    "5": "pentagon",
+    "6": "star",
+    "7": "cross",
+    "8": "person"
+}
