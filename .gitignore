@@ -4,9 +4,12 @@ runs
 letter_classification/isaac_sim_dataset
 letter_classification/datasets
 _uavf_imaging_data
-/data
 *.pyc
 issac_to_yolo/sample_yolo_dataset
 .DS_Store
 *.egg-info
 *.code-workspace
+
+# data
+/data*/
+YOLO_*/
