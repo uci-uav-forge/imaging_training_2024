@@ -1,0 +1,19 @@
+# This is the config file for training yolov8.
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: /home/forge/uavf_2024/imaging_training_2024/godot_data_utils/shape_seg  # dataset root dir
+train: images/train  # train images (relative to 'path')
+val: images/validation  # val images (relative to 'path') 
+test: images/test # test images
+
+# Classes
+names:
+  0: circle
+  1: semicircle
+  2: quarter circle
+  3: triangle
+  4: rectangle
+  5: pentagon
+  6: star
+  7: cross
+  8: person

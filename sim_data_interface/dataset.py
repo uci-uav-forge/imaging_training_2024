@@ -1,4 +1,4 @@
-from . import config
+import config
 
 import numpy as np
 import json
@@ -16,6 +16,7 @@ class ImageOverlay(Enum):
     SEMANTIC_MASK = 1
     BOUNDING_BOXES = 2
     BOUNDING_BOXES_WITH_LABELS = 3
+    SEMANTIC_MASK_AND_BOUNDING_BOXES_WITH_LABELS = 4
 
 class Dataset():
     """
@@ -45,6 +46,28 @@ class Dataset():
     def get_image_path(self, image_id: str, extension: str = 'png') -> Path:
         return self.images_dir / (f"rgb_{image_id}.{extension}")
     
+    def _draw_boxes(self, img: np.ndarray, boxes: np.ndarray, boxes_legend: dict[int, str] | None = None) -> np.ndarray:
+        """
+        Draws the bounding boxes on the image. Draws the label if `boxes_legend` is not `None`.
+        """
+        for class_num, x1, y1, x2, y2, _ in boxes:
+            point1 = (x1, y1)
+            point2 = (x2, y2)
+            
+            img = cv2.rectangle(img, point1, point2, (0, 0, 255), 2)
+            
+            if boxes_legend is not None:
+                label = boxes_legend[class_num]
+                img = cv2.putText(img, label, point1, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            
+        return img
+    
+    def _apply_mask(self, img: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """
+        Applies the mask to the image.
+        """
+        return cv2.addWeighted(img, 0.5, mask, 0.5, 0)
+    
     def get_image(self, image_id: str, extension: str = 'png', overlay = ImageOverlay.NONE) -> np.ndarray:
         """
         Returns the image as a numpy array in default open-cv (BGR) format.
@@ -55,22 +78,25 @@ class Dataset():
         match overlay:
             case ImageOverlay.SEMANTIC_MASK:
                 mask = self.get_semantic_mask(image_id)
-                img = cv2.addWeighted(img, 0.5, mask, 0.5, 0)
+                img = self._apply_mask(img, mask)
         
             case ImageOverlay.BOUNDING_BOXES:
                 boxes = self.get_boxes(image_id)
-                for box in boxes:
-                    img = cv2.rectangle(img, (box[1], box[2]), (box[3], box[4]), (0, 0, 255), 2)
+                img = self._draw_boxes(img, boxes, None)
 
             case ImageOverlay.BOUNDING_BOXES_WITH_LABELS:
                 boxes = self.get_boxes(image_id)
                 boxes_legend = self.get_boxes_legend(image_id)
                 
-                for box, label in zip(boxes, boxes_legend):
-                    label = boxes_legend[label]
-
-                    img = cv2.rectangle(img, (box[1], box[2]), (box[3], box[4]), (0, 0, 255), 2)
-                    img = cv2.putText(img, label, (box[1], box[2]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                img = self._draw_boxes(img, boxes, boxes_legend)
+                    
+            case ImageOverlay.SEMANTIC_MASK_AND_BOUNDING_BOXES_WITH_LABELS:
+                boxes = self.get_boxes(image_id)
+                boxes_legend = self.get_boxes_legend(image_id)
+                
+                mask = self.get_semantic_mask(image_id)
+                img = self._apply_mask(img, mask)
+                img = self._draw_boxes(img, boxes, boxes_legend)
             
             case _: ...
             
@@ -86,10 +112,22 @@ class Dataset():
     def get_semantic_legend_path(self, id: str, extension: str = 'json') -> Path:
         return self.semantic_legend_dir / f"semantic_segmentation_labels_{id}.{extension}"
     
-    def get_semantic_legend(self, id: str, extension: str = 'json') -> dict:
+    def get_semantic_legend(self, id: str, extension: str = 'json') -> dict[tuple[int, int, int], str]:
         legend_path = self.get_semantic_legend_path(id, extension)
         with open(legend_path, 'r') as f:
-            return json.load(f)
+            raw: dict[str, dict[str, str]] = json.load(f)
+        
+        legend: dict[tuple[int, int, int], str] = {}
+        for raw_color, inner in raw.items():
+            r, g, b, a = map(int, raw_color[1:-1].split(', '))
+            if a == 0: continue # Skip the transparent background color
+            
+            # Currently assume that there are no semi-transparent pixels
+            if a != 255: raise ValueError(f"Unexpected alpha value: {a}")
+            
+            legend[(r, g, b)] = inner["class"]
+                
+        return legend
         
     def get_boxes_path(self, image_id: str, extension: str = 'npy') -> Path:
         return self.boxes_dir / f"bounding_box_2d_tight_{image_id}.{extension}"
@@ -131,19 +169,28 @@ if __name__ == "__main__":
     img = dataset.get_image(id)[:, :, ::-1] # BGR to RGB
     img_with_mask = dataset.get_image(id, overlay=ImageOverlay.SEMANTIC_MASK)[:, :, ::-1]
     img_with_boxes = dataset.get_image(id, overlay=ImageOverlay.BOUNDING_BOXES_WITH_LABELS)[:, :, ::-1]
+    img_with_mask_and_boxes = dataset.get_image(id, overlay=ImageOverlay.SEMANTIC_MASK_AND_BOUNDING_BOXES_WITH_LABELS)[:, :, ::-1]
     
     # Display
-    figs, axs = plt.subplots(1, 3, figsize=(15, 5))
+    figs, axs = plt.subplots(2, 2, figsize=(15, 5))
+    flat = axs.flat
+    for ax in flat:
+        ax.axis('off')
     
-    axs[0].imshow(img)
-    axs[0].set_title("Image")
+    flat[0].imshow(img)
+    flat[0].set_title("Image")
     
-    axs[1].imshow(img_with_mask)
-    axs[1].set_title("Image with semantic mask")
+    flat[1].imshow(img_with_mask)
+    flat[1].set_title("Image with semantic mask")
     
-    axs[2].imshow(img_with_boxes)
-    axs[2].set_title("Image with bounding boxes")
+    flat[2].imshow(img_with_boxes)
+    flat[2].set_title("Image with bounding boxes")
+    
+    flat[3].imshow(img_with_mask_and_boxes)
+    flat[3].set_title("Image with semantic mask and bounding boxes")
     
     plt.show()
-    #figs.savefig("example.png", dpi=600, bbox_inches='tight')
+    figs.savefig("example.png", dpi=600, bbox_inches='tight')
     
+    plt.clf()
+    plt.close()

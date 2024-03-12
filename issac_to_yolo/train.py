@@ -17,5 +17,4 @@ model.train(
     cos_lr=True,
     imgsz=640,
     batch=32,
-    device = [0]
-    )
+)
