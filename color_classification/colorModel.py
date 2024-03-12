@@ -5,7 +5,8 @@ from PIL import Image
 from keras import layers, models
 from keras.utils import to_categorical
 
-train_directory = './train/dataset'
+# train_directory = './train/dataset'
+train_directory = './output'
 # change file name here
 train_df = pd.read_csv(train_directory + '/labels.txt')
 

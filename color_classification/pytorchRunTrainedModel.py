@@ -5,18 +5,15 @@ from torchvision import transforms
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from pytorchColorModel import ColorModel, ColorDataset  # Import the necessary modules from your training script
-
 LABEL_TO_COLOR_DICT = {
-    0: "red",
-    1: "orange",
-    2: "yellow",
-    3: "green",
-    4: "blue",
-    5: "purple",
-    6: "white",
-    7: "black",
-    8: "brown",
-    9: "gray",
+    0:"red",
+    1:"green",
+    2:"blue",
+    3:"orange",
+    4:"purple",
+    5:'white',
+    6:'black',
+    7:'brown',
 }
 
 # Assuming num_classes is the same as during training
@@ -90,19 +87,16 @@ def evaluate_colors(model, test_loader, test_df):
 if __name__ == "__main__":
     # Load the trained model
     model = ColorModel(num_classes)
-    model.load_state_dict(torch.load('trained_model.pth'))
+    model.load_state_dict(torch.load('weights.pth'))
     model.eval()
 
     # Load the test dataset
-    test_directory = './test/dataset'
+    test_directory = './test'
     test_df = pd.read_csv(test_directory + '/labels.txt')
     test_file_paths = test_df['file'].apply(lambda x: test_directory + x).values
 
     # Create a DataLoader for the test dataset
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-    ])
+    transform = transforms.ToTensor()
     test_dataset = ColorDataset(test_file_paths, test_df[' letter_color'].values, test_df[' shape_color'].values, transform=transform)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 

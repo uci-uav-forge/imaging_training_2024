@@ -12,9 +12,9 @@ class DataGenerator():
         self.screen = pygame.display.set_mode([self.resolution,resolution])
         self.colors = {
             "red":(200,40,0),
-            "orange" : (217,101,13),
             "green": (53,194,41),
             "blue": (41,87,194),
+            "orange" : (217,101,13),
             "purple": (127,41,194),
             'white': (255, 255, 255),
             'black': (0, 0, 0),
@@ -82,7 +82,7 @@ class DataGenerator():
                         screen.blit(letter, textRect)
                         pygame.display.flip()
                         pygame.image.save(screen, f".{self.path}/dataset/data/{startNum}.jpg")
-                        file.write(f".{self.path}/dataset/data/{startNum}.jpg" + ", " + str(letter_index) +", " + str(shape_index) + "\n")
+                        file.write(f"/data/{startNum}.jpg" + ", " + str(letter_index) +", " + str(shape_index) + "\n")
                         startNum += 1
         return startNum
 

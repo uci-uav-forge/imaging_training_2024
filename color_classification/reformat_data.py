@@ -3,8 +3,8 @@ import numpy as np
 import os
 import math
 
-photos_path = './babyset/train'
-labels_path = './babyset/bbox_labels'
+photos_path = '../godot_data_utils/data/images/test'
+labels_path = '../godot_data_utils/data/all_box_labels/test'
 colors = list({
     "red":(200,40,0),
     "green": (53,194,41),
@@ -38,14 +38,12 @@ with open("./output/labels.txt", "w") as labels:
                     continue
                 if "person" in bbox:
                     continue
-                label, _ , shape_color, letter_color, x_max, y_max, x_min, y_min= bbox.split(" ")
+                label, _ , shape_color, letter_color, x_center, y_center, x_len, y_len= bbox.split(" ")
                 # x_min = int(x_center - length / 2)
                 # y_min = int(y_center - width / 2)
                 # x_max = int(x_center + length / 2)
                 # y_max = int(y_center + width / 2)
-                print(photo.size)
-                print(x_min)
-                cropped_photo = photo.crop((float(x_min) * 640, float(y_min) * 640, float(x_max)*640, float(y_max) *640)).resize((128,128))
+                cropped_photo = photo.crop(((float(x_center)-float(x_len)/2) * 640, (float(y_center)-float(y_len)/2) * 640, (float(x_center)+float(x_len)/2)*640, (float(y_center)+float(y_len)/2) *640)).resize((128,128))
 
                 new_photo_file = f'{index}.png'
                 new_photo_path = os.path.join('./output/data/', new_photo_file)
