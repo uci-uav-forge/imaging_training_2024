@@ -3,3 +3,4 @@ numpy
 opencv-python
 pandas
 torch
+Pillow==9.5
