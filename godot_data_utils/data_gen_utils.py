@@ -75,15 +75,17 @@ def give_normalized_bounding_box( norm_polygon_array: np.ndarray):
     return result_string
 
 def preprocess_img(img):
-    # blur image with random kernel size
-    kernel_size = 3 + 2*np.random.randint(0, 4)
-    if np.random.randint(0,2)==0:
-        img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
-    else:
-        img = cv2.boxFilter(img, -1, (kernel_size, kernel_size))
-    # add random noise with random variance
-    variance = np.random.randint(2, 20)
-    img = img + np.random.normal(0, variance, img.shape)
-    # clamp values to 0-255
-    np.clip(img, 0, 255, out=img)
+    # only augment half of them (why? I made this up on a whim.)
+    if np.random.randint(0,2) == 0:
+        # blur image with random kernel size
+        kernel_size = 3 + 2*np.random.randint(0, 4)
+        if np.random.randint(0,2)==0:
+            img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+        else:
+            img = cv2.boxFilter(img, -1, (kernel_size, kernel_size))
+        # add random noise with random variance
+        variance = np.random.randint(2, 20)
+        img = img + np.random.normal(0, variance, img.shape)
+        # clamp values to 0-255
+        np.clip(img, 0, 255, out=img)
     return img
