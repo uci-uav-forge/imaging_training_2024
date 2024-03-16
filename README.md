@@ -43,3 +43,9 @@ Latest dataset link (january): https://drive.google.com/drive/folders/1bFDhUh6WV
 - Check the path of the subfolders in data.yaml.
   - If `path` is defined, it is relative to the CWD, not the file itself. Use absolute paths to be sure.
   - The other path parameters are relative to the `path` parameter, if defined.
+
+### YOLO: Main thread not in main loop
+  - This is a TKinter error caused by threaded invocation of matplotlib visualization.
+  - Solution: Add `matplotlib.use('Agg')` in `ultralytics/yolo/utils/plotting.py` to disable the visualization.
+    - This is janky, but it works.
+  
