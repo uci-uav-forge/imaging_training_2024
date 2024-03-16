@@ -30,3 +30,16 @@ The default names can be changed in `sim_data_interface/config.py` and can also 
 The interface is written in `sim_data_interface/dataset.py`. The `Dataset` class is the main interface. There is an example at the bottom of the file.
 
 Latest dataset link (january): https://drive.google.com/drive/folders/1bFDhUh6WVlGPChKcFt_PdUnMzQb1qoSw
+
+## Troubleshooting
+
+### `_imagingft` Import Error
+  - Install libfreetype: `sudo apt-get install libfreetype6-dev`
+  - Create a a new environment
+  - Reinstall the packages with `pip install -r requirements.txt --no-binary :all`
+    - `--no-binary :all` forces recompilation, which can help.
+
+### YOLO: Dataset Not Found
+- Check the path of the subfolders in data.yaml.
+  - If `path` is defined, it is relative to the CWD, not the file itself. Use absolute paths to be sure.
+  - The other path parameters are relative to the `path` parameter, if defined.
