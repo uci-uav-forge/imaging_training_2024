@@ -8,13 +8,14 @@ elif task=='detection':
     model = YOLO('yolov8n.yaml')
 else:
     raise NotImplementedError
-    
-model.train(
-    data='/home/eesh/forge/YOLO_DATASET/DATASETv3/data.yaml', 
-    epochs=200,
-    workers=16, 
-    save=True,
-    cos_lr=True,
-    imgsz=640,
-    batch=32,
-)
+
+if __name__ == "__main__":
+    model.train(
+        data='C:\\code\\imaging_training_2024\\YOLO_DATASET\\DATASETv1\\data.yaml', 
+        epochs=200,
+        workers=16, 
+        save=True,
+        cos_lr=True,
+        imgsz=640,
+        batch=32,
+    )
