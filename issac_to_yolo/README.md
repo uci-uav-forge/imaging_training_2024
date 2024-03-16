@@ -19,3 +19,16 @@ Edit the params in the ```yolo_config.py``` file as needed. The most important o
  - Then: ```python3 create_yolo_dataset.py```
  - A progress bar will indicate how much time is left.
  - The dataset will be output in "```TARGET_DIR```/DatasetV#" where # is the dataset version.
+
+## Troubleshooting
+
+### `_imagingft` Import Error
+  - Install libfreetype: `sudo apt-get install libfreetype6-dev`
+  - Create a a new environment
+  - Reinstall the packages with `pip install -r requirements.txt --no-binary :all`
+    - `--no-binary :all` forces recompilation, which can help.
+
+### YOLO: Dataset Not Found
+- Check the path of the subfolders in data.yaml.
+  - If `path` is defined, it is relative to the CWD, not the file itself. Use absolute paths to be sure.
+  - The other path parameters are relative to the `path` parameter, if defined.
