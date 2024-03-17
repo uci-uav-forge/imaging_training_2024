@@ -4,3 +4,4 @@ opencv-python
 pandas
 torch
 Pillow==9.5
+albumentations==1.0.3
