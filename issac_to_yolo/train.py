@@ -17,5 +17,5 @@ if __name__ == "__main__":
         save=True,
         cos_lr=True,
         imgsz=640,
-        batch=32,
+        batch=-1
     )
