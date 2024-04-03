@@ -5,8 +5,6 @@ from pathlib import Path
 # The base output directory for the YOLO dataset
 TARGET_DIR = Path('/home/eesh/forge/YOLO_DATASET/') # Change this to your desired output directory
 
-# The format of the dataset. Either 'bbox' or 'semantic' # currently only bbox is supported
-DATASET_FORMAT = 'bbox'
 
 # If True, will create a new version of the dataset. Otherwise, will overwrite the latest existing one
 CREATE_NEW_VERSION = False 
