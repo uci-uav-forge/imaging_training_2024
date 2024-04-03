@@ -11,5 +11,5 @@ issac_to_yolo/sample_yolo_dataset
 *.code-workspace
 
 # data
-/data*/
+/data*/*/
 YOLO_*/
