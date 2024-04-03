@@ -1,4 +1,5 @@
 from pathlib import Path
+import random
 import shutil
 from typing import Generator, Iterable, Literal, NamedTuple
 import numpy as np
@@ -47,14 +48,25 @@ class OutputLocations(NamedTuple):
         
         train_dir = version_dir / 'train'
         valid_dir = version_dir / 'valid'
+        test_dir = version_dir / 'test'
+                
+        train_img = train_dir / 'images'
+        train_label = train_dir / 'labels'
+        valid_img = valid_dir / 'images'
+        valid_label = valid_dir / 'labels'
+        test_img = test_dir / 'images'
+        test_label = test_dir / 'labels'
+        
+        for dir in [train_img, train_label, valid_img, valid_label, test_img, test_label]:
+            dir.mkdir(parents=True)
         
         return OutputLocations(
-            train_img=train_dir / 'images',
-            train_label=train_dir / 'labels',
-            valid_img=valid_dir / 'images',
-            valid_label=valid_dir / 'labels',
-            test_img=version_dir / 'test' / 'images',
-            test_label=version_dir / 'test' / 'labels'
+            train_img=train_img,
+            train_label=train_label,
+            valid_img=valid_img,
+            valid_label=valid_label,
+            test_img=test_img,
+            test_label=test_label
         )
         
     @staticmethod
