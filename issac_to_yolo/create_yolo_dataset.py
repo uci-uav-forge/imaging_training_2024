@@ -307,7 +307,16 @@ class YOLOFormatter:
         # Copy the images to the target directory
         print('Dataset location:', TARGET_DIR)
         
-        for i, image in enumerate(tqdm(source_paths)):
+        for i, image in enumerate(
+            tqdm(
+                random.choices(source_paths, k=len(source_paths)), # Randomize the order of the images
+                total=len(source_paths),
+                desc='Generating tiles...',
+                unit='images',
+                position=0,
+                leave=True
+            )
+        ):
             # Temporary to eliminate blury images
             # Skip every other image
             if int(YOLOFormatter.get_file_id(image)) % 2 == 0:
