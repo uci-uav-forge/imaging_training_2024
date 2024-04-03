@@ -14,6 +14,10 @@ CREATE_NEW_VERSION = False
 TILE_SIZE = 640 # The size of the tiles to be created
 
 DEBUG = False # If True, will reduce conversion to 50 images and produce print statements
+
+# The remainder of the data will be used for testing   
+TRAIN_RATIO = 0.8 # The ratio of the dataset to be used for training
+VAL_RATIO = 0.1 # The ratio of the dataset to be used for validation
 #---------------------------
 
 #-------ISSAC PARAMS--------
