@@ -1,7 +1,8 @@
+from enum import Enum
 from pathlib import Path
 import random
 import shutil
-from typing import Generator, Iterable, Literal, NamedTuple
+from typing import Callable, Generator, Iterable, Literal, NamedTuple
 import numpy as np
 import json
 from io import StringIO
@@ -103,10 +104,41 @@ class OutputLocations(NamedTuple):
         return target
 
 
+class ClassSelection(Enum):
+    """
+    NOTE: Add color if that becomes a thing
+    """
+    SHAPES = 0
+    CHARACTERS = 1
+    SHAPES_AND_CHARACTERS = 2
+
+
 class YOLOFormatter:
-    def __init__(self, output_locations: OutputLocations, tile_size: int):
+    """
+    Filter functions for each class category that take in a class name and return True if the class should be included.
+    """
+    FILTER_FUNCTIONS: dict[ClassSelection, Callable[[str], bool]] = {
+        ClassSelection.SHAPES: lambda name: name.lower() != 'background' and len(name) > 1,
+        ClassSelection.CHARACTERS: lambda name: name.lower() != 'background' and len(name) == 1,
+        ClassSelection.SHAPES_AND_CHARACTERS: lambda name: name.lower() != 'background'
+    }
+    
+    def __init__(
+        self, 
+        output_locations: OutputLocations, 
+        class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS, 
+        tile_size: int = TILE_SIZE
+    ):
+        """
+        Parameters:
+            output_locations: The locations to save the output tiles and labels
+            class_selection: Which category of classes to include in the output dataset
+            tile_size: The size of the tiles to create
+        """
         self.found_classes: dict[str, str]= {}
+        
         self.output_locations = output_locations
+        self.class_selection = class_seleection
         self.tile_size = tile_size
     
     @staticmethod
@@ -202,13 +234,19 @@ class YOLOFormatter:
 
     def _get_subtile_data(self, image_path: Path) -> Generator[TileData, None, None]:
         """
-        Yields the labels for each subtile of the given image.
+        Yields the subtile and corresponding labels of the given image.
         
         If an unknown class is found, it will be added to the `found_classes` dictionary.
+        
+        If `DEBUG` is True, it will print the original label in parentheses in the label file,
+        which will make it unusable.
         
         Returns:
             A generator of tuples containing the subtile id, the subtile image, and the label file content.
         """
+        # Function determining whther to include a class in the dataset
+        filter_func = YOLOFormatter.FILTER_FUNCTIONS[self.class_selection]
+        
         # Get the image id and the labels file
         image_id = YOLOFormatter.get_file_id(image_path)
         label_pos = YOLOFormatter.get_file_by_id(image_id, "bbox_pos") #npy type
@@ -244,6 +282,11 @@ class YOLOFormatter:
                     self.found_classes[str(cls)] = class_label_data[str(cls)]["class"]
 
                 if cls == 0: continue # Skip background
+                
+                # Skip the class if it doesn't meet the filter criteria
+                classname = self.found_classes[str(cls)]
+                if not filter_func(classname):
+                    continue
                 
                 # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
@@ -360,17 +403,42 @@ class YOLOFormatter:
         with open(TARGET_DIR / 'data.yaml', 'w') as f:
             f.writelines(data_yaml)
             
-    def create_dataset(self, num_train: int, num_valid: int, source_paths: list[Path]):
+    def create_dataset(
+        self, 
+        num_train: int, 
+        num_valid: int, 
+        source_paths: list[Path],
+        class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS
+    ):
+        """
+        Creates the YOLO dataset from the list of source RGB image paths, dividing them into tiles.
+        
+        Finds the associated label files in the same directory from the image name.
+        
+        Splits the dataset into training, validation, and testing sets, per YOLO convention.
+        The number of test images is the remainder after the training and validation images are selected.
+        
+        Parameters:
+            num_train: The number of images to use for training
+            num_valid: The number of images to use for validation
+            source_paths: The list of paths to the source RGB images
+        """
         print('Generating images and generating label files...')
         self._create_tiles(self.output_locations, num_train, num_valid, source_paths)
         
         print("Now making data.yaml file...")
         self._create_data_yaml_file()
 
-def create_yolo_dataset():
+def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS):
+    """
+    Driver function to create the YOLO dataset.
+    
+    Parameters:
+        class_selection: The category of classes to include in the dataset
+    """
     output_locations = OutputLocations.create_from_base_path(TARGET_DIR, CREATE_NEW_VERSION)
     
-    formatter = YOLOFormatter(output_locations, TILE_SIZE)
+    formatter = YOLOFormatter(output_locations, class_selection, TILE_SIZE)
 
     # Determine the amount of images
     source_img_paths = list(DATA_DIR.glob('rgb*.png'))
@@ -399,4 +467,4 @@ def create_yolo_dataset():
 
 
 if __name__ == '__main__':
-    create_yolo_dataset()    
+    create_yolo_dataset(ClassSelection.SHAPES)    
