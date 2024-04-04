@@ -29,6 +29,7 @@ class TileData(NamedTuple):
 
 
 class OutputLocations(NamedTuple):
+    base_dir: Path
     train_img: Path
     train_label: Path
     valid_img: Path
@@ -62,6 +63,7 @@ class OutputLocations(NamedTuple):
             dir.mkdir(parents=True)
         
         return OutputLocations(
+            base_dir=version_dir,
             train_img=train_img,
             train_label=train_label,
             valid_img=valid_img,
@@ -112,6 +114,89 @@ class ClassSelection(Enum):
     CHARACTERS = 1
     SHAPES_AND_CHARACTERS = 2
 
+class ClassnameMap:
+    """
+    Bidirectional mapping between classnames and class ids.
+    
+    Class IDs are 0-indexed and counted upwards.
+    
+    Removal of a class decreases the class id of all classes with a higher id.
+    """
+    def __init__(self):
+        self.classname_to_id: dict[str, int] = {}
+        self.id_to_classname: dict[int, str] = {}
+        
+    def add_class(self, classname: str) -> int:
+        """
+        Adds a class to the mapping and returns the class id.
+        """
+        if classname in self.classname_to_id:
+            return self.classname_to_id[classname]
+        
+        class_id = len(self.classname_to_id)
+        self.classname_to_id[classname] = class_id
+        self.id_to_classname[class_id] = classname
+        
+        return class_id
+    
+    def remove_class(self, classname: str):
+        """
+        Removes a class from the mapping.
+        
+        Raises a KeyError if the class is not in the mapping.
+        """
+        class_id = self.classname_to_id.pop(classname)
+        del self.id_to_classname[class_id]
+        
+        for id, name in self.id_to_classname.items():
+            if id > class_id:
+                self.classname_to_id[name] -= 1
+                
+    def get_class_id(self, classname: str) -> int:
+        """
+        Gets the class id for the given classname.
+        
+        Raises a KeyError if the class is not in the mapping.
+        """
+        return self.classname_to_id[classname]
+    
+    def get_classname(self, class_id: int) -> str:
+        """
+        Gets the classname for the given class id.
+        
+        Raises a KeyError if the class id is not in the mapping.
+        """
+        return self.id_to_classname[class_id]
+    
+    def classnames(self) -> Generator[str, None, None]:
+        """
+        Yields the classnames in the mapping in order of class id.
+        """
+        for id in range(len(self)):
+            yield self.id_to_classname[id]
+    
+    def ids(self) -> Generator[int, None, None]:
+        """
+        Yields the class ids in the mapping in order of class id.
+        """
+        for id in range(len(self)):
+            yield id
+    
+    def __len__(self):
+        return len(self.classname_to_id)
+    
+    def __iter__(self):
+        """
+        Yields the classnames in the mapping in order of class id.
+        """
+        return self.classnames()
+    
+    def __contains__(self, classname: str):
+        """
+        Whether the name is in the mapping.
+        """
+        return classname in self.classname_to_id
+        
 
 class YOLOFormatter:
     """
@@ -130,16 +215,23 @@ class YOLOFormatter:
         tile_size: int = TILE_SIZE
     ):
         """
+        NOTE: Class IDs will not not be the same between Isaac and output dataset because this can filter out classes.
+        
         Parameters:
             output_locations: The locations to save the output tiles and labels
             class_selection: Which category of classes to include in the output dataset
             tile_size: The size of the tiles to create
         """
-        self.found_classes: dict[str, str]= {}
-        
         self.output_locations = output_locations
         self.class_selection = class_seleection
         self.tile_size = tile_size
+        
+        # Includes all found classnames, including ones that are filtered out
+        # so that they can be skipped efficiently
+        self.isaac_classes: dict[int, str] = {}
+        
+        # Includes only classnames that are not filtered out
+        self.output_classes: ClassnameMap = ClassnameMap()
     
     @staticmethod
     def get_file_id(path_to_file : Path):
@@ -271,22 +363,27 @@ class YOLOFormatter:
 
             # For each entry in the original label position data we need to check all the tiles to see if it is in the tile
             for entry in label_pos_data:
+                isaac_id, x1, y1, x2, y2, rot = entry
+                
+                if isaac_id == 0: continue # Skip background
 
-                cls, x1, y1, x2, y2, rot = entry
-
-                if str(cls) not in self.found_classes.keys():
+                if isaac_id not in self.isaac_classes:
                     # Load the class label data
                     class_label = YOLOFormatter.get_file_by_id(image_id, 'bbox_legend') #json type
                     with open(class_label) as class_label_file:
                         class_label_data = json.load(class_label_file)
-                    self.found_classes[str(cls)] = class_label_data[str(cls)]["class"]
-
-                if cls == 0: continue # Skip background
+                    self.isaac_classes[int(isaac_id)] = class_label_data[str(isaac_id)]["class"]
+                
+                classname = self.isaac_classes[int(isaac_id)]
                 
                 # Skip the class if it doesn't meet the filter criteria
-                classname = self.found_classes[str(cls)]
                 if not filter_func(classname):
                     continue
+                
+                if not classname in self.output_classes:
+                    self.output_classes.add_class(classname)
+                    
+                output_class_id = self.output_classes.get_class_id(classname)
                 
                 # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
@@ -317,8 +414,8 @@ class YOLOFormatter:
                     height = (y2 - y1) / self.tile_size
 
                     # Write the yolo format values to the temp file
-                    if DEBUG: tempFile.write(f"({cls} {x1} {y1} {x2} {y2})\n")
-                    tempFile.write(f'{cls} {x_center} {y_center} {width} {height}\n')
+                    if DEBUG: tempFile.write(f"({output_class_id} {x1} {y1} {x2} {y2})\n")
+                    tempFile.write(f'{output_class_id} {x_center} {y_center} {width} {height}\n')
         
         yield TileData(f"{image_id}_{tile_id}", subtile, tempFile.getvalue())
         
@@ -342,13 +439,14 @@ class YOLOFormatter:
 
     def _create_tiles(
         self,
-        output_locations: OutputLocations,
         num_train: int,
         num_valid: int,
         source_paths: list[Path]
     ):
+        base_dir, train_img, train_label, valid_img, valid_label, test_img, test_label = self.output_locations
+        
         # Copy the images to the target directory
-        print('Dataset location:', TARGET_DIR)
+        print('Dataset location:', base_dir)
         
         for i, image in enumerate(
             tqdm(
@@ -366,14 +464,14 @@ class YOLOFormatter:
                 continue
             
             if i < num_train:
-                tiles_dir = output_locations.train_img
-                label_dir = output_locations.train_label
+                tiles_dir = train_img
+                label_dir = train_label
             elif i < num_train + num_valid:
-                tiles_dir = output_locations.valid_img
-                label_dir = output_locations.valid_label
+                tiles_dir = valid_img
+                label_dir = valid_label
             else:
-                tiles_dir = output_locations.test_img
-                label_dir = output_locations.test_label
+                tiles_dir = test_img
+                label_dir = test_label
             
             if DEBUG: start_time = time.time()
             YOLOFormatter._write_tiles_and_labels(self._get_subtile_data(image), tiles_dir, label_dir)
@@ -384,23 +482,19 @@ class YOLOFormatter:
     def _create_data_yaml_file(self):
         # Creates the data.yaml file
 
-        # create a list of all the classes in order
-        class_keys = list(map(int, self.found_classes.keys()))
-        number_of_classes = max(class_keys)
-        print(f'Found {number_of_classes+1} classes')
-        
-        classes: list[str] = [""]*(number_of_classes+1)
-        for i in range(number_of_classes+1):
-            classes[i] = self.found_classes.get(str(i), "UNKNOWN CLASS")
+        number_of_classes = len(self.output_classes)
+        print(f'Found {number_of_classes} classes')
+
+        classnames = list(self.output_classes.classnames())
 
         data_yaml = [
-        "train: ../train/images\n",
-        "val: ../valid/images\n",
-        "test: ../test/images\n\n",
-        f"nc: {number_of_classes+1}\n",
-        f"names: {classes}\n"
+            "train: ../train/images\n",
+            "val: ../valid/images\n",
+            "test: ../test/images\n\n",
+            f"nc: {number_of_classes}\n",
+            f"names: {classnames}\n"
         ]
-        with open(TARGET_DIR / 'data.yaml', 'w') as f:
+        with open(self.output_locations.base_dir / 'data.yaml', 'w') as f:
             f.writelines(data_yaml)
             
     def create_dataset(
@@ -408,7 +502,6 @@ class YOLOFormatter:
         num_train: int, 
         num_valid: int, 
         source_paths: list[Path],
-        class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS
     ):
         """
         Creates the YOLO dataset from the list of source RGB image paths, dividing them into tiles.
@@ -424,7 +517,7 @@ class YOLOFormatter:
             source_paths: The list of paths to the source RGB images
         """
         print('Generating images and generating label files...')
-        self._create_tiles(self.output_locations, num_train, num_valid, source_paths)
+        self._create_tiles(num_train, num_valid, source_paths)
         
         print("Now making data.yaml file...")
         self._create_data_yaml_file()
