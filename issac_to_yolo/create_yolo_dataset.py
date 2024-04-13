@@ -221,11 +221,11 @@ class YOLOFormatter:
     def __init__(
             self,
             output_locations: OutputLocations,
-            class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
+            class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
             tile_size: int = TILE_SIZE
     ):
         """
-        NOTE: Class IDs will not not be the same between Isaac and output dataset because this can filter out classes.
+        NOTE: Class IDs will not be the same between Isaac and output dataset because this can filter out classes.
         
         Parameters:
             output_locations: The locations to save the output tiles and labels
@@ -233,7 +233,7 @@ class YOLOFormatter:
             tile_size: The size of the tiles to create
         """
         self.output_locations = output_locations
-        self.class_selection = class_seleection
+        self.class_selection = class_selection
         self.tile_size = tile_size
 
         # Includes all found classnames, including ones that are filtered out
@@ -502,7 +502,7 @@ class YOLOFormatter:
                 tiles_dir = test_img
                 label_dir = test_label
 
-            if DEBUG: start_time = time.time()
+            start_time = time.time()
             YOLOFormatter._write_tiles_and_labels(self._get_subtile_data(image), tiles_dir, label_dir)
             if DEBUG: print(f"time to write tiles: {time.time() - start_time}")
 
