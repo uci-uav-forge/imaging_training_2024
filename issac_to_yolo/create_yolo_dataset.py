@@ -36,7 +36,7 @@ class OutputLocations(NamedTuple):
     valid_label: Path
     test_img: Path
     test_label: Path
-    
+
     @staticmethod
     def create_from_base_path(base: Path, create_new: bool) -> "OutputLocations":
         """
@@ -47,21 +47,21 @@ class OutputLocations(NamedTuple):
         If create_new is False, it will overwrite the highest contiguous version directory.
         """
         version_dir = OutputLocations._create_version_dir(base, create_new)
-        
+
         train_dir = version_dir / 'train'
         valid_dir = version_dir / 'valid'
         test_dir = version_dir / 'test'
-                
+
         train_img = train_dir / 'images'
         train_label = train_dir / 'labels'
         valid_img = valid_dir / 'images'
         valid_label = valid_dir / 'labels'
         test_img = test_dir / 'images'
         test_label = test_dir / 'labels'
-        
+
         for dir in [train_img, train_label, valid_img, valid_label, test_img, test_label]:
             dir.mkdir(parents=True)
-        
+
         return OutputLocations(
             base_dir=version_dir,
             train_img=train_img,
@@ -71,7 +71,7 @@ class OutputLocations(NamedTuple):
             test_img=test_img,
             test_label=test_label
         )
-        
+
     @staticmethod
     def _create_version_dir(base: Path, create_new: bool) -> Path:
         """
@@ -88,9 +88,9 @@ class OutputLocations(NamedTuple):
 
         if not create_new and version > 1:
             version -= 1
-        
+
         target = base / f'DATASETv{version}'
-        
+
         if target.exists():
             print(f'Warning: Target directory {target} already exists. Overwriting.')
             data = input('Enter "yes" to confirm deletion...')
@@ -99,10 +99,10 @@ class OutputLocations(NamedTuple):
             else:
                 print('Aborting...')
                 exit()
-                
+
         print(f'Creating target directory {target}')
         target.mkdir(parents=True)
-        
+
         return target
 
 
@@ -125,20 +125,20 @@ class ClassnameMap:
     def __init__(self):
         self.classname_to_id: dict[str, int] = {}
         self.id_to_classname: dict[int, str] = {}
-        
+
     def add_class(self, classname: str) -> int:
         """
         Adds a class to the mapping and returns the class id.
         """
         if classname in self.classname_to_id:
             return self.classname_to_id[classname]
-        
+
         class_id = len(self.classname_to_id)
         self.classname_to_id[classname] = class_id
         self.id_to_classname[class_id] = classname
-        
+
         return class_id
-    
+
     def remove_class(self, classname: str):
         """
         Removes a class from the mapping.
@@ -147,11 +147,11 @@ class ClassnameMap:
         """
         class_id = self.classname_to_id.pop(classname)
         del self.id_to_classname[class_id]
-        
+
         for id, name in self.id_to_classname.items():
             if id > class_id:
                 self.classname_to_id[name] -= 1
-                
+
     def get_class_id(self, classname: str) -> int:
         """
         Gets the class id for the given classname.
@@ -159,7 +159,7 @@ class ClassnameMap:
         Raises a KeyError if the class is not in the mapping.
         """
         return self.classname_to_id[classname]
-    
+
     def get_classname(self, class_id: int) -> str:
         """
         Gets the classname for the given class id.
@@ -167,36 +167,36 @@ class ClassnameMap:
         Raises a KeyError if the class id is not in the mapping.
         """
         return self.id_to_classname[class_id]
-    
+
     def classnames(self) -> Generator[str, None, None]:
         """
         Yields the classnames in the mapping in order of class id.
         """
         for id in range(len(self)):
             yield self.id_to_classname[id]
-    
+
     def ids(self) -> Generator[int, None, None]:
         """
         Yields the class ids in the mapping in order of class id.
         """
         for id in range(len(self)):
             yield id
-    
+
     def __len__(self):
         return len(self.classname_to_id)
-    
+
     def __iter__(self):
         """
         Yields the classnames in the mapping in order of class id.
         """
         return self.classnames()
-    
+
     def __contains__(self, classname: str):
         """
         Whether the name is in the mapping.
         """
         return classname in self.classname_to_id
-        
+
 
 class YOLOFormatter:
     """
@@ -207,11 +207,11 @@ class YOLOFormatter:
         ClassSelection.CHARACTERS: lambda name: name.lower() != 'background' and len(name) == 1,
         ClassSelection.SHAPES_AND_CHARACTERS: lambda name: name.lower() != 'background'
     }
-    
+
     def __init__(
-        self, 
-        output_locations: OutputLocations, 
-        class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS, 
+        self,
+        output_locations: OutputLocations,
+        class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
         tile_size: int = TILE_SIZE
     ):
         """
@@ -225,14 +225,14 @@ class YOLOFormatter:
         self.output_locations = output_locations
         self.class_selection = class_seleection
         self.tile_size = tile_size
-        
+
         # Includes all found classnames, including ones that are filtered out
         # so that they can be skipped efficiently
         self.isaac_classes: dict[int, str] = {}
-        
+
         # Includes only classnames that are not filtered out
         self.output_classes: ClassnameMap = ClassnameMap()
-    
+
     @staticmethod
     def get_file_id(path_to_file : Path):
         """
@@ -248,8 +248,8 @@ class YOLOFormatter:
 
     @staticmethod
     def get_file_by_id(
-        id: str, 
-        type: Literal['rgb', 'semantic', 'semantic_legend', 'bbox_legend', 'bbox_pos'], 
+        id: str,
+        type: Literal['rgb', 'semantic', 'semantic_legend', 'bbox_legend', 'bbox_pos'],
         root_dir : Path|None = None
     ) -> Path:
         """
@@ -281,7 +281,7 @@ class YOLOFormatter:
         for file in root_dir.glob(pattern):
             if YOLOFormatter.get_file_id(file) == id:
                 return file
-        
+
         raise FileNotFoundError(f'File with id {id} and type {type} not found in {root_dir}')
 
     @staticmethod
@@ -292,7 +292,7 @@ class YOLOFormatter:
 
     @staticmethod
     def _subtile(
-        image_arr : np.ndarray, 
+        image_arr : np.ndarray,
         tileSize : int
     ) -> Generator[Tile, None, None]:
         """
@@ -301,7 +301,7 @@ class YOLOFormatter:
         The tiles are yielded in row-major order.
         """
         height, width, channels = image_arr.shape
-        
+
         height_amount, height_overlap = YOLOFormatter._size_and_overlap(tileSize, height)
         width_amount, width_overlap = YOLOFormatter._size_and_overlap(tileSize, width)
 
@@ -313,7 +313,7 @@ class YOLOFormatter:
 
                 x_start = j*(tileSize-width_overlap)
                 x_end = x_start+tileSize
-                
+
                 tile = Image.fromarray(image_arr[y_start:y_end, x_start:x_end])
 
                 yield Tile(
@@ -338,7 +338,7 @@ class YOLOFormatter:
         """
         # Function determining whther to include a class in the dataset
         filter_func = YOLOFormatter.FILTER_FUNCTIONS[self.class_selection]
-        
+
         # Get the image id and the labels file
         image_id = YOLOFormatter.get_file_id(image_path)
         label_pos = YOLOFormatter.get_file_by_id(image_id, "bbox_pos") #npy type
@@ -348,14 +348,14 @@ class YOLOFormatter:
 
         # Get the image and convert it to an array
         source = np.array(Image.open(image_path))
-        
+
         # Create a bbox label file for each tile
         # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
         for tile_id, (subtile, tile_xmin, tile_ymin, tile_xmax, tile_ymax) in enumerate(YOLOFormatter._subtile(source, self.tile_size)):
             # TODO: Decompose the following code into smaller functions
-            
+
             # Create temp file
-            tempFile = StringIO()
+            temp_file = StringIO()
 
             # translate label position data to yolo format
             # yolo format: <object-class> <x_center> <y_center> <width> <height>
@@ -364,7 +364,7 @@ class YOLOFormatter:
             # For each entry in the original label position data we need to check all the tiles to see if it is in the tile
             for entry in label_pos_data:
                 isaac_id, x1, y1, x2, y2, rot = entry
-                
+
                 if isaac_id == 0: continue # Skip background
 
                 if isaac_id not in self.isaac_classes:
@@ -373,18 +373,18 @@ class YOLOFormatter:
                     with open(class_label) as class_label_file:
                         class_label_data = json.load(class_label_file)
                     self.isaac_classes[int(isaac_id)] = class_label_data[str(isaac_id)]["class"]
-                
+
                 classname = self.isaac_classes[int(isaac_id)]
-                
+
                 # Skip the class if it doesn't meet the filter criteria
                 if not filter_func(classname):
                     continue
-                
+
                 if not classname in self.output_classes:
                     self.output_classes.add_class(classname)
-                    
+
                 output_class_id = self.output_classes.get_class_id(classname)
-                
+
                 # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
                 # Check if at least one of the points are in the tile
@@ -414,26 +414,26 @@ class YOLOFormatter:
                     height = (y2 - y1) / self.tile_size
 
                     # Write the yolo format values to the temp file
-                    if DEBUG: tempFile.write(f"({output_class_id} {x1} {y1} {x2} {y2})\n")
-                    tempFile.write(f'{output_class_id} {x_center} {y_center} {width} {height}\n')
-        
-        yield TileData(f"{image_id}_{tile_id}", subtile, tempFile.getvalue())
-        
+                    if DEBUG: temp_file.write(f"({output_class_id} {x1} {y1} {x2} {y2})\n")
+                    temp_file.write(f'{output_class_id} {x_center} {y_center} {width} {height}\n')
+
+            yield TileData(f"{image_id}_{tile_id}", subtile, temp_file.getvalue())
+
     @staticmethod
     def _write_tiles_and_labels(tile_data_iterable: Iterable[TileData], tiles_dir: Path, labels_dir: Path):
         def _write_tile(id: str, tile: Image.Image):
             tile.save(tiles_dir / f'{id}.png', compress_level=3)
-            
+
         def _write_label(id: str, label: str):
             with open(labels_dir / f'{id}.txt', 'w') as f:
                 f.write(label)
-                
+
         pool = Pool(6) # 6 threads seems to work best
-        
+
         for id, tile, labels in tile_data_iterable:
             pool.apply_async(_write_tile, args=(id, tile))
             pool.apply_async(_write_label, args=(id, labels))
-            
+
         pool.close()
         pool.join()
 
@@ -444,10 +444,10 @@ class YOLOFormatter:
         source_paths: list[Path]
     ):
         base_dir, train_img, train_label, valid_img, valid_label, test_img, test_label = self.output_locations
-        
+
         # Copy the images to the target directory
         print('Dataset location:', base_dir)
-        
+
         for i, image in enumerate(
             tqdm(
                 random.choices(source_paths, k=len(source_paths)), # Randomize the order of the images
@@ -462,7 +462,7 @@ class YOLOFormatter:
             # Skip every other image
             if int(YOLOFormatter.get_file_id(image)) % 2 == 0:
                 continue
-            
+
             if i < num_train:
                 tiles_dir = train_img
                 label_dir = train_label
@@ -472,7 +472,7 @@ class YOLOFormatter:
             else:
                 tiles_dir = test_img
                 label_dir = test_label
-            
+
             if DEBUG: start_time = time.time()
             YOLOFormatter._write_tiles_and_labels(self._get_subtile_data(image), tiles_dir, label_dir)
             if DEBUG: print(f"time to write tiles: {time.time() - start_time}")
@@ -496,11 +496,11 @@ class YOLOFormatter:
         ]
         with open(self.output_locations.base_dir / 'data.yaml', 'w') as f:
             f.writelines(data_yaml)
-            
+
     def create_dataset(
-        self, 
-        num_train: int, 
-        num_valid: int, 
+        self,
+        num_train: int,
+        num_valid: int,
         source_paths: list[Path],
     ):
         """
@@ -518,7 +518,7 @@ class YOLOFormatter:
         """
         print('Generating images and generating label files...')
         self._create_tiles(num_train, num_valid, source_paths)
-        
+
         print("Now making data.yaml file...")
         self._create_data_yaml_file()
 
@@ -530,7 +530,7 @@ def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_
         class_selection: The category of classes to include in the dataset
     """
     output_locations = OutputLocations.create_from_base_path(TARGET_DIR, CREATE_NEW_VERSION)
-    
+
     formatter = YOLOFormatter(output_locations, class_selection, TILE_SIZE)
 
     # Determine the amount of images
@@ -560,4 +560,4 @@ def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_
 
 
 if __name__ == '__main__':
-    create_yolo_dataset(ClassSelection.SHAPES)    
+    create_yolo_dataset(ClassSelection.SHAPES)
