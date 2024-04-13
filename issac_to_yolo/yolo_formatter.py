@@ -18,6 +18,12 @@ from yolo_config import TILE_SIZE, DEBUG, DATA_DIR
 
 class YOLOFormatter:
     """
+    Class for converting images to yolo format
+
+    TODO: Support segmentation datax
+    """
+
+    """
     Filter functions for each class category that take in a class name and return True if the class should be included.
     """
     FILTER_FUNCTIONS: dict[ClassSelection, Callable[[str], bool]] = {
