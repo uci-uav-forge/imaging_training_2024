@@ -12,7 +12,8 @@ from yolo_config import TARGET_DIR, CREATE_NEW_VERSION, TILE_SIZE, DEBUG, TRAIN_
 import math
 import time
 # from multiprocessing import Pool (this is for processes, not threads)
-from multiprocessing.pool import ThreadPool as Pool #(for threads)
+from multiprocessing.pool import ThreadPool as Pool  #(for threads)
+
 
 class Tile(NamedTuple):
     image: Image.Image
@@ -26,6 +27,13 @@ class TileData(NamedTuple):
     id: str
     image: Image.Image
     labels: str
+
+
+class Bbox(NamedTuple):
+    y: float
+    x: float
+    height: float
+    width: float
 
 
 class OutputLocations(NamedTuple):
@@ -114,6 +122,7 @@ class ClassSelection(Enum):
     CHARACTERS = 1
     SHAPES_AND_CHARACTERS = 2
 
+
 class ClassnameMap:
     """
     Bidirectional mapping between classnames and class ids.
@@ -122,6 +131,7 @@ class ClassnameMap:
     
     Removal of a class decreases the class id of all classes with a higher id.
     """
+
     def __init__(self):
         self.classname_to_id: dict[str, int] = {}
         self.id_to_classname: dict[int, str] = {}
@@ -209,10 +219,10 @@ class YOLOFormatter:
     }
 
     def __init__(
-        self,
-        output_locations: OutputLocations,
-        class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
-        tile_size: int = TILE_SIZE
+            self,
+            output_locations: OutputLocations,
+            class_seleection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
+            tile_size: int = TILE_SIZE
     ):
         """
         NOTE: Class IDs will not not be the same between Isaac and output dataset because this can filter out classes.
@@ -234,7 +244,7 @@ class YOLOFormatter:
         self.output_classes: ClassnameMap = ClassnameMap()
 
     @staticmethod
-    def get_file_id(path_to_file : Path):
+    def get_file_id(path_to_file: Path):
         """
         Gets the file id from the given file path.
         """
@@ -248,9 +258,9 @@ class YOLOFormatter:
 
     @staticmethod
     def get_file_by_id(
-        id: str,
-        type: Literal['rgb', 'semantic', 'semantic_legend', 'bbox_legend', 'bbox_pos'],
-        root_dir : Path|None = None
+            id: str,
+            type: Literal['rgb', 'semantic', 'semantic_legend', 'bbox_legend', 'bbox_pos'],
+            root_dir: Path | None = None
     ) -> Path:
         """
         Gets the Path for a file with the given id and type.
@@ -287,13 +297,13 @@ class YOLOFormatter:
     @staticmethod
     def _size_and_overlap(section: int, total_length: int) -> tuple[int, int]:
         amount = math.ceil(total_length / section)
-        overlap = int(((amount * section) - total_length) / (amount-1))
+        overlap = int(((amount * section) - total_length) / (amount - 1))
         return amount, overlap
 
     @staticmethod
     def _subtile(
-        image_arr : np.ndarray,
-        tileSize : int
+            image_arr: np.ndarray,
+            tileSize: int
     ) -> Generator[Tile, None, None]:
         """
         Splits an image array into tiles of the given size and yields each tile.
@@ -307,12 +317,11 @@ class YOLOFormatter:
 
         for i in range(height_amount):
             for j in range(width_amount):
+                y_start = i * (tileSize - height_overlap)
+                y_end = y_start + tileSize
 
-                y_start = i*(tileSize-height_overlap)
-                y_end = y_start+tileSize
-
-                x_start = j*(tileSize-width_overlap)
-                x_end = x_start+tileSize
+                x_start = j * (tileSize - width_overlap)
+                x_end = x_start + tileSize
 
                 tile = Image.fromarray(image_arr[y_start:y_end, x_start:x_end])
 
@@ -323,6 +332,36 @@ class YOLOFormatter:
                     x_end=x_end,
                     y_end=y_end
                 )
+
+    @staticmethod
+    def _isaac_to_yolo_bbox(tile: Tile, x1: int, y1: int, x2: int, y2: int) -> Bbox:
+        _, x_start, y_start, x_end, y_end = tile
+
+        tile_height = y_end - y_start
+        tile_width = x_end - x_start
+
+        def constrain(val, min_val, max_val):
+            return min(max_val, max(min_val, val))
+
+        # Constrain the values to be within the tile
+        x1 = constrain(x1, x_start, x_end)
+        y1 = constrain(y1, y_start, y_end)
+        x2 = constrain(x2, x_start, x_end)
+        y2 = constrain(y2, y_start, y_end)
+
+        # Translate the values to be relative to the tile
+        x1 -= x_start
+        y1 -= y_start
+        x2 -= x_start
+        y2 -= y_end
+
+        # Calculate the yolo format values
+        y_center = ((y1 + y2) / 2) / tile_height
+        x_center = ((x1 + x2) / 2) / tile_width
+        box_height = (y2 - y1) / tile_height
+        box_width = (x2 - x1) / tile_width
+
+        return Bbox(y_center, x_center, box_height, box_width)
 
     def _get_subtile_data(self, image_path: Path) -> Generator[TileData, None, None]:
         """
@@ -341,7 +380,7 @@ class YOLOFormatter:
 
         # Get the image id and the labels file
         image_id = YOLOFormatter.get_file_id(image_path)
-        label_pos = YOLOFormatter.get_file_by_id(image_id, "bbox_pos") #npy type
+        label_pos = YOLOFormatter.get_file_by_id(image_id, "bbox_pos")  #npy type
 
         # Load the label position data
         label_pos_data = np.load(label_pos)
@@ -351,7 +390,8 @@ class YOLOFormatter:
 
         # Create a bbox label file for each tile
         # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
-        for tile_id, (subtile, tile_xmin, tile_ymin, tile_xmax, tile_ymax) in enumerate(YOLOFormatter._subtile(source, self.tile_size)):
+        for tile_id, tile in enumerate(YOLOFormatter._subtile(source, self.tile_size)):
+            subtile, tile_xmin, tile_ymin, tile_xmax, tile_ymax = tile
             # TODO: Decompose the following code into smaller functions
 
             # Create temp file
@@ -365,11 +405,11 @@ class YOLOFormatter:
             for entry in label_pos_data:
                 isaac_id, x1, y1, x2, y2, rot = entry
 
-                if isaac_id == 0: continue # Skip background
+                if isaac_id == 0: continue  # Skip background
 
                 if isaac_id not in self.isaac_classes:
                     # Load the class label data
-                    class_label = YOLOFormatter.get_file_by_id(image_id, 'bbox_legend') #json type
+                    class_label = YOLOFormatter.get_file_by_id(image_id, 'bbox_legend')  #json type
                     with open(class_label) as class_label_file:
                         class_label_data = json.load(class_label_file)
                     self.isaac_classes[int(isaac_id)] = class_label_data[str(isaac_id)]["class"]
@@ -388,34 +428,23 @@ class YOLOFormatter:
                 # tile_pos_data: [tile_xmin, tile_ymin, tile_xmax, tile_ymax] per tile
                 # entry format: <object-class> <x1> <y1> <x2> <y2>
                 # Check if at least one of the points are in the tile
-                if ((tile_xmin <= x1 <= tile_xmax and tile_ymin <= y1 <= tile_ymax)
-                or (tile_xmin <= x2 <= tile_xmax and tile_ymin <= y2 <= tile_ymax)):
-                    # Means that a point is in the tile
+                one_point_in_tile = (
+                        (tile_xmin <= x1 <= tile_xmax and tile_ymin <= y1 <= tile_ymax) or
+                        (tile_xmin <= x2 <= tile_xmax and tile_ymin <= y2 <= tile_ymax)
+                )
 
-                    def constrain(val, min_val, max_val):
-                        return min(max_val, max(min_val, val))
+                if not one_point_in_tile:
+                    continue
 
-                    # Constrain the values to be within the tile
-                    x1 = constrain(x1, tile_xmin, tile_xmax)
-                    y1 = constrain(y1, tile_ymin, tile_ymax)
-                    x2 = constrain(x2, tile_xmin, tile_xmax)
-                    y2 = constrain(y2, tile_ymin, tile_ymax)
+                if DEBUG:
+                    temp_file.write(f"({output_class_id} {x1} {y1} {x2} {y2})\n")
 
-                    # Translate the values to be relative to the tile
-                    x1 -= tile_xmin
-                    y1 -= tile_ymin
-                    x2 -= tile_xmin
-                    y2 -= tile_ymin
+                x_center, y_center, box_height, box_width = self._isaac_to_yolo_bbox(
+                    tile, x1, y1, x2, y2
+                )
 
-                    # Calculate the yolo format values
-                    x_center = ((x1 + x2) / 2) / self.tile_size
-                    y_center = ((y1 + y2) / 2) / self.tile_size
-                    width = (x2 - x1) / self.tile_size
-                    height = (y2 - y1) / self.tile_size
-
-                    # Write the yolo format values to the temp file
-                    if DEBUG: temp_file.write(f"({output_class_id} {x1} {y1} {x2} {y2})\n")
-                    temp_file.write(f'{output_class_id} {x_center} {y_center} {width} {height}\n')
+                # Write the yolo format values to the temp file
+                temp_file.write(f'{output_class_id} {x_center} {y_center} {box_width} {box_height}\n')
 
             yield TileData(f"{image_id}_{tile_id}", subtile, temp_file.getvalue())
 
@@ -428,7 +457,7 @@ class YOLOFormatter:
             with open(labels_dir / f'{id}.txt', 'w') as f:
                 f.write(label)
 
-        pool = Pool(6) # 6 threads seems to work best
+        pool = Pool(6)  # 6 threads seems to work best
 
         for id, tile, labels in tile_data_iterable:
             pool.apply_async(_write_tile, args=(id, tile))
@@ -438,10 +467,10 @@ class YOLOFormatter:
         pool.join()
 
     def _create_tiles(
-        self,
-        num_train: int,
-        num_valid: int,
-        source_paths: list[Path]
+            self,
+            num_train: int,
+            num_valid: int,
+            source_paths: list[Path]
     ):
         base_dir, train_img, train_label, valid_img, valid_label, test_img, test_label = self.output_locations
 
@@ -449,14 +478,14 @@ class YOLOFormatter:
         print('Dataset location:', base_dir)
 
         for i, image in enumerate(
-            tqdm(
-                random.choices(source_paths, k=len(source_paths)), # Randomize the order of the images
-                total=len(source_paths),
-                desc='Generating tiles...',
-                unit='images',
-                position=0,
-                leave=True
-            )
+                tqdm(
+                    random.choices(source_paths, k=len(source_paths)),  # Randomize the order of the images
+                    total=len(source_paths),
+                    desc='Generating tiles...',
+                    unit='images',
+                    position=0,
+                    leave=True
+                )
         ):
             # Temporary to eliminate blury images
             # Skip every other image
@@ -498,10 +527,10 @@ class YOLOFormatter:
             f.writelines(data_yaml)
 
     def create_dataset(
-        self,
-        num_train: int,
-        num_valid: int,
-        source_paths: list[Path],
+            self,
+            num_train: int,
+            num_valid: int,
+            source_paths: list[Path],
     ):
         """
         Creates the YOLO dataset from the list of source RGB image paths, dividing them into tiles.
@@ -521,6 +550,7 @@ class YOLOFormatter:
 
         print("Now making data.yaml file...")
         self._create_data_yaml_file()
+
 
 def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS):
     """
@@ -552,7 +582,8 @@ def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_
     height, width, channels = np.array(Image.open(source_img_paths[0])).shape
     tiles_per_image = math.ceil(height / TILE_SIZE) * math.ceil(width / TILE_SIZE)
 
-    print(f'Using {num_train} images for training, {num_valid} images for validation, and {num_test} images for testing')
+    print(
+        f'Using {num_train} images for training, {num_valid} images for validation, and {num_test} images for testing')
     print(f'Each image will be split into {tiles_per_image} tiles')
 
     formatter.create_dataset(num_train, num_valid, source_img_paths)
