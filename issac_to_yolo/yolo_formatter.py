@@ -12,8 +12,14 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from issac_to_yolo.formatter_types import TileData, Bbox, Tile, ClassnameMap, ClassSelection, OutputLocations
+from .formatter_types import TileData, Bbox, Tile, ClassnameMap, OutputLocations
+from .classname_filters import (
+    AnnotationSelection, shapes_filter, characters_filter, shapes_and_characters_filter, targets_name_transform
+)
 from yolo_config import TILE_SIZE, DEBUG, DATA_DIR
+
+
+_classname_transformer: type = Callable[[str], str | None]
 
 
 class YOLOFormatter:
@@ -26,16 +32,17 @@ class YOLOFormatter:
     """
     Filter functions for each class category that take in a class name and return True if the class should be included.
     """
-    FILTER_FUNCTIONS: dict[ClassSelection, Callable[[str], bool]] = {
-        ClassSelection.SHAPES: lambda name: name.lower() != 'background' and len(name) > 1,
-        ClassSelection.CHARACTERS: lambda name: name.lower() != 'background' and len(name) == 1,
-        ClassSelection.SHAPES_AND_CHARACTERS: lambda name: name.lower() != 'background'
+    CLASSNAME_TRANSFORMATIONS: dict[AnnotationSelection, _classname_transformer] = {
+        AnnotationSelection.SHAPES: shapes_filter,
+        AnnotationSelection.CHARACTERS: characters_filter,
+        AnnotationSelection.SHAPES_AND_CHARACTERS: shapes_and_characters_filter,
+        AnnotationSelection.TARGETS_ONLY: targets_name_transform
     }
 
     def __init__(
             self,
             output_locations: OutputLocations,
-            class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS,
+            annotation_selection: AnnotationSelection = AnnotationSelection.SHAPES_AND_CHARACTERS,
             tile_size: int = TILE_SIZE
     ):
         """
@@ -43,11 +50,11 @@ class YOLOFormatter:
 
         Parameters:
             output_locations: The locations to save the output tiles and labels
-            class_selection: Which category of classes to include in the output dataset
+            annotation_selection: Which category of classes to include in the output dataset
             tile_size: The size of the tiles to create
         """
         self.output_locations = output_locations
-        self.class_selection = class_selection
+        self.class_selection = annotation_selection
         self.tile_size = tile_size
 
         # Includes all found classnames, including ones that are filtered out
@@ -189,8 +196,7 @@ class YOLOFormatter:
         Returns:
             A generator of tuples containing the subtile id, the subtile image, and the label file content.
         """
-        # Function determining whther to include a class in the dataset
-        filter_func = YOLOFormatter.FILTER_FUNCTIONS[self.class_selection]
+        classname_transformation = YOLOFormatter.CLASSNAME_TRANSFORMATIONS[self.class_selection]
 
         # Get the image id and the labels file
         image_id = YOLOFormatter.get_file_id(image_path)
@@ -228,13 +234,15 @@ class YOLOFormatter:
                         class_label_data = json.load(class_label_file)
                     self.isaac_classes[int(isaac_id)] = class_label_data[str(isaac_id)]["class"]
 
-                classname = self.isaac_classes[int(isaac_id)]
+                classname = classname_transformation(
+                    self.isaac_classes[int(isaac_id)]
+                )
 
                 # Skip the class if it doesn't meet the filter criteria
-                if not filter_func(classname):
+                if classname is None:
                     continue
 
-                if not classname in self.output_classes:
+                if classname not in self.output_classes:
                     self.output_classes.add_class(classname)
 
                 output_class_id = self.output_classes.get_class_id(classname)

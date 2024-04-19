@@ -3,12 +3,13 @@ import math
 import numpy as np
 from PIL import Image
 
-from issac_to_yolo.formatter_types import ClassSelection, OutputLocations
+from issac_to_yolo.formatter_types import OutputLocations
+from issac_to_yolo.classname_filters import AnnotationSelection
 from issac_to_yolo.yolo_config import TARGET_DIR, CREATE_NEW_VERSION, TILE_SIZE, DATA_DIR, DEBUG, TRAIN_RATIO, VAL_RATIO
 from issac_to_yolo.yolo_formatter import YOLOFormatter
 
 
-def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_AND_CHARACTERS):
+def create_yolo_dataset(class_selection: AnnotationSelection = AnnotationSelection.SHAPES_AND_CHARACTERS):
     """
     Driver function to create the YOLO dataset.
 
@@ -47,4 +48,4 @@ def create_yolo_dataset(class_selection: ClassSelection = ClassSelection.SHAPES_
 
 
 if __name__ == '__main__':
-    create_yolo_dataset(ClassSelection.SHAPES)
+    create_yolo_dataset(AnnotationSelection.SHAPES)

@@ -1,5 +1,4 @@
 import shutil
-from enum import Enum
 from pathlib import Path
 from typing import Generator, NamedTuple
 from PIL import Image
@@ -102,15 +101,6 @@ class OutputLocations(NamedTuple):
         target.mkdir(parents=True)
 
         return target
-
-
-class ClassSelection(Enum):
-    """
-    NOTE: Add color if that becomes a thing
-    """
-    SHAPES = 0
-    CHARACTERS = 1
-    SHAPES_AND_CHARACTERS = 2
 
 
 class ClassnameMap:
