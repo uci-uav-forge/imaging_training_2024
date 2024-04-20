@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import NamedTuple, Any
+from typing import NamedTuple, Any, Iterable
 from enum import Enum
 
 import yaml
@@ -34,16 +34,16 @@ class YoloSubsetDirs(NamedTuple):
 
 class DatasetDescriptor(NamedTuple):
     parent_dir: Path
-    train_dir: YoloSubsetDirs
-    val_dir: YoloSubsetDirs
-    test_dir: YoloSubsetDirs
-    classes: list[str]
+    train_dirs: YoloSubsetDirs
+    val_dirs: YoloSubsetDirs
+    test_dirs: YoloSubsetDirs
+    classes: tuple[str, ...]
 
     def check_dirs_exist(self):
         if not Path(self.parent_dir).is_dir():
             raise NotADirectoryError(f"{self.parent_dir} is not a directory")
 
-        for task_dir in (self.train_dir, self.val_dir, self.test_dir):
+        for task_dir in (self.train_dirs, self.val_dirs, self.test_dirs):
             for sub_dir in task_dir:
                 if not sub_dir.is_dir():
                     raise NotADirectoryError(f"{sub_dir} is not a directory")
@@ -52,9 +52,28 @@ class DatasetDescriptor(NamedTuple):
         if self.parent_dir.is_dir() and not any(self.parent_dir.iterdir()):
             raise IsADirectoryError(f"{self.parent_dir} exists and is not empty")
 
-        for task_dir in (self.train_dir, self.val_dir, self.test_dir):
+        for task_dir in (self.train_dirs, self.val_dirs, self.test_dirs):
             for sub_dir in task_dir:
                 sub_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_image_and_labels_dirs(self, task: Task) -> YoloSubsetDirs:
+        match task:
+            case Task.TRAIN:
+                return self.train_dirs
+            case Task.VAL:
+                return self.val_dirs
+            case Task.TEST:
+                return self.test_dirs
+            case _:
+                raise ValueError(f"Task {task} is invalid")
+
+    @staticmethod
+    def from_parent_dir(parent_dir: Path, classes: Iterable[str] = ()) -> 'DatasetDescriptor':
+        train_dir = YoloSubsetDirs.from_task_dir(parent_dir / 'train')
+        val_dir = YoloSubsetDirs.from_task_dir(parent_dir / 'valid')
+        test_dir = YoloSubsetDirs.from_task_dir(parent_dir / 'test')
+
+        return DatasetDescriptor(parent_dir, train_dir, val_dir, test_dir, tuple(classes))
 
     @staticmethod
     def from_yaml(yaml_path: Path) -> 'DatasetDescriptor':
@@ -84,5 +103,5 @@ class DatasetDescriptor(NamedTuple):
             YoloSubsetDirs.from_task_dir(train_dir),
             YoloSubsetDirs.from_task_dir(val_dir),
             YoloSubsetDirs.from_task_dir(test_dir),
-            classnames
+            tuple(classnames)
         )

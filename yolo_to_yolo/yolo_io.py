@@ -24,30 +24,35 @@ class YoloReader:
         self,
         yaml_path: Path,
         prediction_task: PredictionTask,
-        num_workers: int = multiprocessing.cpu_count()
+        num_workers: int = int(multiprocessing.cpu_count()) - 1
     ) -> None:
         self.prediction_task = prediction_task
         self.num_workers = num_workers
 
         self.yaml_path = yaml_path
-        self.parent_dir, self.train_dirs, self.val_dirs, self.test_dirs, self.classes = \
-            DatasetDescriptor.from_yaml(self.yaml_path)
 
-        self._check_paths()
+        self.descriptor = DatasetDescriptor.from_yaml(self.yaml_path)
+        self.descriptor.check_dirs_exist()
 
-    def _check_paths(self):
-        """
-        Check whether the stored directories exist. Throws if something is missing.
+    @property
+    def parent_dir(self) -> Path:
+        return self.descriptor.parent_dir
 
-        Must be called after initialization.
-        """
-        if not Path(self.parent_dir).is_dir():
-            raise NotADirectoryError()
+    @property
+    def train_dirs(self) -> YoloSubsetDirs:
+        return self.descriptor.train_dirs
 
-        for task_dir in (self.train_dirs, self.val_dirs, self.test_dirs):
-            for subdir in task_dir:
-                if not subdir.is_dir():
-                    raise NotADirectoryError(f"{subdir} is not a directory")
+    @property
+    def val_dirs(self) -> YoloSubsetDirs:
+        return self.descriptor.val_dirs
+
+    @property
+    def test_dirs(self) -> YoloSubsetDirs:
+        return self.descriptor.test_dirs
+
+    @property
+    def classes(self) -> tuple[str, ...]:
+        return self.descriptor.classes
 
     def get_data(
         self,
@@ -61,13 +66,13 @@ class YoloReader:
         outputs: list[Iterable[tuple[YoloImageData, Task]]] = []
 
         for task in tasks:
-            images_dir, labels_dir = self._get_image_and_labels_dirs(task)
+            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
             output: Iterable[tuple[YoloImageData, Task]] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
-                chunksize=4
+                chunksize=8
             )
 
             outputs.append(output)
@@ -90,16 +95,12 @@ class YoloReader:
         image = np.array(Image.open(img_path))
 
         img_id = self._get_id_from_filename(img_path)
-        _, labels_dir = self._get_image_and_labels_dirs(task)
+        _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
         labels = list(self._get_labels_from_id(img_id, labels_dir))
 
-        data_obj = YoloImageData(image, labels)
+        data_obj = YoloImageData(img_id, image, labels)
 
         return data_obj, task
-
-    @staticmethod
-    def _get_id_from_filename(filename: Path) -> str:
-        return filename.stem
 
     def _get_labels_from_id(self, img_id: str, labels_dir: Path) -> Iterable[YoloLabel]:
         labels_path = labels_dir / f'{img_id}.txt'
@@ -107,6 +108,10 @@ class YoloReader:
         with open(labels_path, 'r') as f:
             for line in f.readlines():
                 yield self._parse_label_line(line)
+
+    @staticmethod
+    def _get_id_from_filename(filename: Path) -> str:
+        return filename.stem
 
     def _parse_label_line(self, label_line: str) -> YoloLabel:
         """
@@ -133,23 +138,82 @@ class YoloReader:
 
         return YoloLabel(location_data, classname)
 
-    def _get_image_and_labels_dirs(self, task: Task) -> YoloSubsetDirs:
-        match task:
-            case Task.TRAIN:
-                return self.train_dirs
-            case Task.VAL:
-                return self.val_dirs
-            case Task.TEST:
-                return self.test_dirs
-            case _:
-                raise ValueError(f"Task {task} is invalid")
-
 
 class YoloWriter:
-    ...
+    def __init__(
+        self,
+        out_dir: Path,
+        prediction_task: PredictionTask,
+        classes: tuple[str, ...],
+        num_workers: int = int(multiprocessing.cpu_count()) - 1
+    ) -> None:
+        self.out_dir = out_dir
+        self.prediction_task = prediction_task
+        self.num_workers = num_workers
+
+        self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
+        self.descriptor.create_dirs()
+
+    def write_data(
+        self,
+        data: Iterable[tuple[YoloImageData, Task]]
+    ) -> None:
+        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
+        pool.imap_unordered(self._worker_task, data, chunksize=8)
+
+        pool.close()
+        pool.join()
+
+        # Write it after everything's done as an indicator that the dataset is complete.
+        self._write_dataset_yaml()
+
+    def _worker_task(self, data_and_task: tuple[YoloImageData, Task]) -> None:
+        data, task = data_and_task
+        img_id, image, labels = data
+
+        images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+
+        img_path = images_dir / f'{img_id}.png'
+        labels_path = labels_dir / f'{img_id}.txt'
+
+        Image.fromarray(image).save(img_path)
+
+        with open(labels_path, 'w') as f:
+            for label in labels:
+                f.write(self._format_label(label))
+                f.write('\n')
+
+    @staticmethod
+    def _format_label(label: YoloLabel) -> str:
+        if isinstance(label.location, YoloBbox):
+            return f"{label.classname} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"
+
+        if isinstance(label.location, YoloOutline):
+            return f"{label.classname} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
+
+        raise ValueError(f"Unknown location annotation type: {label.location}")
+
+    def _write_dataset_yaml(self):
+        yaml_path = self.out_dir / "data.yaml"
+
+        contents: list[str] = [
+            f"path: {self.out_dir}",
+            "train: ../train/images",
+            "val: ../valid/images",
+            "test: ../test/images",
+            "",
+            f"nc: {len(self.descriptor.classes)}",
+            f"names: {list(self.descriptor.classes)}",
+        ]
+
+        with yaml_path.open('w') as f:
+            f.write("\n".join(contents))
 
 
 def batched(iterable: Iterable, n: int) -> Iterable[tuple]:
+    """
+    Implementation of `itertools.batched` because I couldn't import it, despite using python 3.11.
+    """
     if n < 1:
         raise ValueError("n must be greater than or equal to 1")
 
@@ -170,8 +234,10 @@ if __name__ == "__main__":
         PredictionTask.DETECTION,
     )
 
-    for i, (data, task) in enumerate(tqdm(reader.get_data())):
-        if i % 100 == 0:
-            print(i, data.labels, task)
+    writer = YoloWriter(
+        Path('/home/minh/Desktop/imaging_training_2024/data/YOLO_DATASET/DATASETv1_processed/'),
+        PredictionTask.DETECTION,
+        reader.classes
+    )
 
-
+    writer.write_data(tqdm(reader.get_data(), desc="Processing data"))

@@ -33,5 +33,6 @@ class YoloImageData(NamedTuple):
     """
     One image/tile's annotations for YOLO training. Can be for detection or segmentation.
     """
+    img_id: str
     image: np.ndarray
     labels: list[YoloLabel]
