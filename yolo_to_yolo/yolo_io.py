@@ -229,6 +229,11 @@ def batched(iterable: Iterable, n: int) -> Iterable[tuple]:
 
 
 if __name__ == "__main__":
+    """
+    Example usage of the YoloReader and YoloWriter.
+    
+    This should read, parse, then write the data back to a new directory, which should look the same.
+    """
     reader = YoloReader(
         Path('/home/minh/Desktop/imaging_training_2024/data/YOLO_DATASET/DATASETv1/data.yaml'),
         PredictionTask.DETECTION,
