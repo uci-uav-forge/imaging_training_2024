@@ -134,7 +134,8 @@ class ClassnameMap:
 
     def add_class(self, classname: str) -> int:
         """
-        Adds a class to the mapping and returns the class id.
+        Adds a class to the mapping and returns the class id if it is new.
+        Otherwise, returns the existing class id.
         """
         if classname in self._classname_to_id:
             return self._classname_to_id[classname]
