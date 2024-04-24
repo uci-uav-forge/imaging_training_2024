@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task
+from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
 
 
 class YoloReader:
@@ -152,6 +152,8 @@ class YoloWriter:
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
+        self.classname_map = ClassnameMap.from_classnames(classes)
+
     def write(
         self,
         data: Iterable[YoloImageData]
@@ -166,6 +168,9 @@ class YoloWriter:
         self._write_dataset_yaml()
 
     def _worker_task(self, data: YoloImageData) -> None:
+        """
+        Worker task for writing image and labels files.
+        """
         img_id, task, image, labels = data
 
         images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
@@ -180,13 +185,14 @@ class YoloWriter:
                 f.write(self._format_label(label))
                 f.write('\n')
 
-    @staticmethod
-    def _format_label(label: YoloLabel) -> str:
+    def _format_label(self, label: YoloLabel) -> str:
+        class_id = self.classname_map.get_class_id(label.classname)
+
         if isinstance(label.location, YoloBbox):
-            return f"{label.classname} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"
+            return f"{class_id} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"
 
         if isinstance(label.location, YoloOutline):
-            return f"{label.classname} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
+            return f"{class_id} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
 
         raise ValueError(f"Unknown location annotation type: {label.location}")
 
