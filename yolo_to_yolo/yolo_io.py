@@ -58,18 +58,18 @@ class YoloReader:
         self,
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
         img_file_pattern: str = "*.png"
-    ) -> Generator[tuple[YoloImageData, Task], None, None]:
+    ) -> Generator[YoloImageData, None, None]:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        outputs: list[Iterable[tuple[YoloImageData, Task]]] = []
+        outputs: list[Iterable[YoloImageData]] = []
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
-            output: Iterable[tuple[YoloImageData, Task]] = pool.imap_unordered(
+            output: Iterable[YoloImageData] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
                 chunksize=8
@@ -84,7 +84,7 @@ class YoloReader:
 
         pool.join()
 
-    def _worker_task(self, path_and_task: tuple[Path, Task]) -> tuple[YoloImageData, Task]:
+    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData:
         """
         Worker task for reading image and labels files.
 
@@ -98,9 +98,7 @@ class YoloReader:
         _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
         labels = list(self._get_labels_from_id(img_id, labels_dir))
 
-        data_obj = YoloImageData(img_id, image, labels)
-
-        return data_obj, task
+        return YoloImageData(img_id, task, image, labels)
 
     def _get_labels_from_id(self, img_id: str, labels_dir: Path) -> Iterable[YoloLabel]:
         labels_path = labels_dir / f'{img_id}.txt'
@@ -156,7 +154,7 @@ class YoloWriter:
 
     def write_data(
         self,
-        data: Iterable[tuple[YoloImageData, Task]]
+        data: Iterable[YoloImageData]
     ) -> None:
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
         pool.imap_unordered(self._worker_task, data, chunksize=8)
@@ -167,9 +165,8 @@ class YoloWriter:
         # Write it after everything's done as an indicator that the dataset is complete.
         self._write_dataset_yaml()
 
-    def _worker_task(self, data_and_task: tuple[YoloImageData, Task]) -> None:
-        data, task = data_and_task
-        img_id, image, labels = data
+    def _worker_task(self, data: YoloImageData) -> None:
+        img_id, task, image, labels = data
 
         images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
