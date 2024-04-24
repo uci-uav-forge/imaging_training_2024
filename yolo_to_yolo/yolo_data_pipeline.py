@@ -1,36 +1,12 @@
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable
 
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData
+from yolo_to_yolo.data_transformers import ShapeTargetsOnly, YoloDataTransformer
 from yolo_to_yolo.yolo_io import YoloReader, YoloWriter
-from yolo_to_yolo.yolo_io_types import PredictionTask, Task
-
-
-class YoloDataTransformer(ABC):
-    """
-    Parent class for YOLO data transformations, e.g., augmentations, tiling, classname-mapping, etc.
-
-    Subclasses only need to implement the __call__ method.
-    """
-    @abstractmethod
-    def __call__(self, input_data: YoloImageData) -> Iterable[YoloImageData]:
-        """
-        Transforms one annotated, YOLO-formatted image into a sequence of them.
-
-        The one-to-many signature is to support sub-tiling or offline augmentation steps.
-        """
-        ...
-
-    def flat_apply(self, input_data: Iterable[YoloImageData]) -> Iterable[YoloImageData]:
-        """
-        Applies the transformation to each annotated, YOLO-formatted image, outputting a
-        possibly-longer sequence of them.
-        """
-        for datum in input_data:
-            yield from self(datum)
+from yolo_to_yolo.yolo_io_types import PredictionTask
 
 
 class YoloDataPipeline:
@@ -104,5 +80,5 @@ if __name__ == "__main__":
 
     pipeline.apply_to_dir(
         Path("/home/minh/Desktop/imaging_training_2024/data/YOLO_DATASET/DATASETv1"),
-        Path("/home/minh/Desktop/imaging_training_2024/data/YOLO_DATASET/DATASETv1_dummy")
+        Path("/home/minh/Desktop/imaging_training_2024/data/YOLO_DATASET/DATASETv1_processed")
     )
