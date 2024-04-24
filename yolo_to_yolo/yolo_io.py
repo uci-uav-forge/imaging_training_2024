@@ -191,7 +191,7 @@ class YoloWriter:
                 f.write('\n')
 
     def _format_label(self, label: YoloLabel) -> str:
-        class_id = self.classname_map.add_class(label.classname)
+        class_id = self.classname_map.get_class_id(label.classname)
 
         if isinstance(label.location, YoloBbox):
             return f"{class_id} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"

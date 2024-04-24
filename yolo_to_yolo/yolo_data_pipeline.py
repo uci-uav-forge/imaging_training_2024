@@ -38,8 +38,24 @@ class YoloDataPipeline:
     Class to compose YOLO dataset pipelines.
     """
 
-    def __init__(self, pipeline: list[YoloDataTransformer], prediction_task: PredictionTask = PredictionTask.DETECTION):
+    def __init__(
+        self,
+        pipeline: list[YoloDataTransformer],
+        classes: list[str] | None = None,
+        prediction_task: PredictionTask = PredictionTask.DETECTION
+    ):
+        """
+        NOTE: If the input classes are not the same as the output classes,
+        it must be specified because it cannot be inferred.
+
+        Parameters:
+            pipeline: List of transformers to apply in sequence.
+            classes: List of class names in the output dataset.
+                If None, the classes are assumed to be the same as the input dataset.
+            prediction_task: The prediction task for the output dataset.
+        """
         self.pipeline = pipeline
+        self.classes = classes
         self.prediction_task = prediction_task
 
     def apply(self, input_data: Iterable[YoloImageData]) -> Iterable[YoloImageData]:
@@ -59,7 +75,7 @@ class YoloDataPipeline:
         Applies the transformations to an entire directory of YOLO-formatted data.
         """
         reader = YoloReader(input_dir / "data.yaml", self.prediction_task)
-        classes = reader.classes
+        classes = reader.classes if self.classes is None else self.classes
         writer = YoloWriter(output_dir, self.prediction_task, classes)
 
         data_in = reader.read()
@@ -82,7 +98,8 @@ if __name__ == "__main__":
     This should replicate the input directory to the output directory.
     """
     pipeline = YoloDataPipeline(
-        pipeline=[DummyTransformer()]
+        pipeline=[DummyTransformer()],
+        # classes=["target"],
     )
 
     pipeline.apply_to_dir(
