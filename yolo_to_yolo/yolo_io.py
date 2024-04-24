@@ -54,7 +54,7 @@ class YoloReader:
     def classes(self) -> tuple[str, ...]:
         return self.descriptor.classes
 
-    def get_data(
+    def read(
         self,
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
         img_file_pattern: str = "*.png"
@@ -152,7 +152,7 @@ class YoloWriter:
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
-    def write_data(
+    def write(
         self,
         data: Iterable[YoloImageData]
     ) -> None:
@@ -242,4 +242,4 @@ if __name__ == "__main__":
         reader.classes
     )
 
-    writer.write_data(tqdm(reader.get_data(), desc="Processing data"))
+    writer.write(tqdm(reader.read(), desc="Processing data"))
