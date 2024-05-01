@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task
+from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
 
 
 class YoloReader:
@@ -54,22 +54,22 @@ class YoloReader:
     def classes(self) -> tuple[str, ...]:
         return self.descriptor.classes
 
-    def get_data(
+    def read(
         self,
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
         img_file_pattern: str = "*.png"
-    ) -> Generator[tuple[YoloImageData, Task], None, None]:
+    ) -> Generator[YoloImageData, None, None]:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        outputs: list[Iterable[tuple[YoloImageData, Task]]] = []
+        outputs: list[Iterable[YoloImageData]] = []
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
-            output: Iterable[tuple[YoloImageData, Task]] = pool.imap_unordered(
+            output: Iterable[YoloImageData] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
                 chunksize=8
@@ -84,7 +84,7 @@ class YoloReader:
 
         pool.join()
 
-    def _worker_task(self, path_and_task: tuple[Path, Task]) -> tuple[YoloImageData, Task]:
+    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData:
         """
         Worker task for reading image and labels files.
 
@@ -98,9 +98,7 @@ class YoloReader:
         _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
         labels = list(self._get_labels_from_id(img_id, labels_dir))
 
-        data_obj = YoloImageData(img_id, image, labels)
-
-        return data_obj, task
+        return YoloImageData(img_id, task, image, labels)
 
     def _get_labels_from_id(self, img_id: str, labels_dir: Path) -> Iterable[YoloLabel]:
         labels_path = labels_dir / f'{img_id}.txt'
@@ -140,6 +138,11 @@ class YoloReader:
 
 
 class YoloWriter:
+    """
+    Writer for YOLO data from the YoloDataPipeline.
+
+    Preserves the ordering of the class map that is inputting and creates new indices for new ones.
+    """
     def __init__(
         self,
         out_dir: Path,
@@ -154,9 +157,11 @@ class YoloWriter:
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
-    def write_data(
+        self.classname_map = ClassnameMap.from_classnames(classes)
+
+    def write(
         self,
-        data: Iterable[tuple[YoloImageData, Task]]
+        data: Iterable[YoloImageData]
     ) -> None:
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
         pool.imap_unordered(self._worker_task, data, chunksize=8)
@@ -167,9 +172,11 @@ class YoloWriter:
         # Write it after everything's done as an indicator that the dataset is complete.
         self._write_dataset_yaml()
 
-    def _worker_task(self, data_and_task: tuple[YoloImageData, Task]) -> None:
-        data, task = data_and_task
-        img_id, image, labels = data
+    def _worker_task(self, data: YoloImageData) -> None:
+        """
+        Worker task for writing image and labels files.
+        """
+        img_id, task, image, labels = data
 
         images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
@@ -183,13 +190,14 @@ class YoloWriter:
                 f.write(self._format_label(label))
                 f.write('\n')
 
-    @staticmethod
-    def _format_label(label: YoloLabel) -> str:
+    def _format_label(self, label: YoloLabel) -> str:
+        class_id = self.classname_map.get_class_id(label.classname)
+
         if isinstance(label.location, YoloBbox):
-            return f"{label.classname} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"
+            return f"{class_id} {label.location.x} {label.location.y} {label.location.w} {label.location.h}"
 
         if isinstance(label.location, YoloOutline):
-            return f"{label.classname} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
+            return f"{class_id} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
 
         raise ValueError(f"Unknown location annotation type: {label.location}")
 
@@ -245,4 +253,4 @@ if __name__ == "__main__":
         reader.classes
     )
 
-    writer.write_data(tqdm(reader.get_data(), desc="Processing data"))
+    writer.write(tqdm(reader.read(), desc="Processing data"))

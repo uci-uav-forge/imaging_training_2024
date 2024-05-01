@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import NamedTuple, Any, Iterable
+from typing import NamedTuple, Any, Iterable, Generator
 from enum import Enum
 
 import yaml
@@ -105,3 +105,101 @@ class DatasetDescriptor(NamedTuple):
             YoloSubsetDirs.from_task_dir(test_dir),
             tuple(classnames)
         )
+
+
+class ClassnameMap:
+    """
+    Bidirectional mapping between classnames and class ids.
+
+    Class IDs are 0-indexed and counted upwards.
+
+    Removal of a class decreases the class id of all classes with a higher id.
+    """
+
+    def __init__(self):
+        self._classname_to_id: dict[str, int] = {}
+        self._id_to_classname: dict[int, str] = {}
+
+    @staticmethod
+    def from_classnames(classnames: Iterable[str]) -> 'ClassnameMap':
+        """
+        Creates a ClassnameMap from an iterable of classnames.
+        """
+        classname_map = ClassnameMap()
+
+        for classname in classnames:
+            classname_map.add_class(classname)
+
+        return classname_map
+
+    def add_class(self, classname: str) -> int:
+        """
+        Adds a class to the mapping and returns the class id if it is new.
+        Otherwise, returns the existing class id.
+        """
+        if classname in self._classname_to_id:
+            return self._classname_to_id[classname]
+
+        class_id = len(self._classname_to_id)
+        self._classname_to_id[classname] = class_id
+        self._id_to_classname[class_id] = classname
+
+        return class_id
+
+    def remove_class(self, classname: str):
+        """
+        Removes a class from the mapping.
+
+        Raises a KeyError if the class is not in the mapping.
+        """
+        class_id = self._classname_to_id.pop(classname)
+        del self._id_to_classname[class_id]
+
+        for id, name in self._id_to_classname.items():
+            if id > class_id:
+                self._classname_to_id[name] -= 1
+
+    def get_class_id(self, classname: str) -> int:
+        """
+        Gets the class id for the given classname.
+
+        Raises a KeyError if the class is not in the mapping.
+        """
+        return self._classname_to_id[classname]
+
+    def get_classname(self, class_id: int) -> str:
+        """
+        Gets the classname for the given class id.
+
+        Raises a KeyError if the class id is not in the mapping.
+        """
+        return self._id_to_classname[class_id]
+
+    def classnames(self) -> Generator[str, None, None]:
+        """
+        Yields the classnames in the mapping in order of class id.
+        """
+        for id in range(len(self)):
+            yield self._id_to_classname[id]
+
+    def ids(self) -> Generator[int, None, None]:
+        """
+        Yields the class ids in the mapping in order of class id.
+        """
+        yield from range(len(self))
+
+    def __len__(self):
+        return len(self._classname_to_id)
+
+    def __iter__(self):
+        """
+        Yields the classnames in the mapping in order of class id.
+        """
+        return self.classnames()
+
+    def __contains__(self, classname: str):
+        """
+        Whether the name is in the mapping.
+        """
+        return classname in self._classname_to_id
+
