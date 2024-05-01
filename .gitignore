@@ -13,3 +13,7 @@ issac_to_yolo/sample_yolo_dataset
 # data
 /data*/*/
 YOLO_*/
+
+# IDE
+.idea/
+.vscode/
