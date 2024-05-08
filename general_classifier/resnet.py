@@ -59,19 +59,28 @@ class ResNet(nn.Module):
         self.in_planes = 64
         self.dry_run = dry_run
 
-        self.conv1 = nn.Conv2d(self.IN_CHANNELS, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AvgPool2d(7, stride=1)
-        # NOTE: Currently single-head
-        self.fc = nn.Linear(512 * block.EXPANSION, num_classes)
+        self.submodules = nn.ModuleDict({
+            "conv1": nn.Conv2d(
+                self.IN_CHANNELS, 64,
+                kernel_size=7, stride=2, padding=3, bias=False
+            ),
+            "bn1": nn.BatchNorm2d(64),
+            "relu": nn.ReLU(inplace=True),
+            "maxpool": nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            "layer1": self._make_layer(block, 64, layers[0]),
+            "layer2": self._make_layer(block, 128, layers[1], stride=2),
+            "layer3": self._make_layer(block, 256, layers[2], stride=2),
+            "layer4": self._make_layer(block, 512, layers[3], stride=2),
+            "avgpool": nn.AvgPool2d(7, stride=1),
+            # NOTE: Currently single-headed
+            "flatten": nn.Flatten(),
+            "fc": nn.Linear(512 * block.EXPANSION, num_classes),
+        })
 
+    def init_weights(self):
+        """
+        Initializes weights, depending on the layer type.
+        """
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -96,25 +105,20 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns a tuple of the logits and the probabilities.
+        """
+        if self.dry_run:
+            print("Input shape: ", x.shape)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        for module_name, module in self.submodules.items():
+            x = module(x)
+            if self.dry_run:
+                print(f"Shape after {module_name}: ", x.shape)
 
-        # because MNIST is already 1x1 here:
-        # disable avg pooling
-        x = self.avgpool(x)
-
-        x = x.view(x.size(0), -1)
-        logits = self.fc(x)
-        probas = nn.functional.softmax(logits, dim=1)
-        return logits, probas
+        probabilities = nn.functional.softmax(x, dim=1)
+        return x, probabilities
 
 
 def make_resnet34(num_classes: int, dry_run=False):
