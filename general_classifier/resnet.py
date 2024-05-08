@@ -49,7 +49,7 @@ class BasicBlock(nn.Module):
 class ResNet(nn.Module):
     IN_CHANNELS = 3
 
-    def __init__(self, block, layers: Sequence[int], num_classes: int, dry_run=False):
+    def __init__(self, block, layers: Sequence[int], num_classes: int, debug=False):
         """
         TODO: Support for multi-head classification. It's currently single-head because
             there is only one FC layer, so multiple heads would do the same thing.
@@ -57,7 +57,7 @@ class ResNet(nn.Module):
         """
         super(ResNet, self).__init__()
         self.in_planes = 64
-        self.dry_run = dry_run
+        self.debug = debug
 
         self.submodules = nn.ModuleDict({
             "conv1": nn.Conv2d(
@@ -109,12 +109,12 @@ class ResNet(nn.Module):
         """
         Returns a tuple of the logits and the probabilities.
         """
-        if self.dry_run:
+        if self.debug:
             print("Input shape: ", x.shape)
 
         for module_name, module in self.submodules.items():
             x = module(x)
-            if self.dry_run:
+            if self.debug:
                 print(f"Shape after {module_name}: ", x.shape)
 
         probabilities = nn.functional.softmax(x, dim=1)
@@ -127,7 +127,7 @@ def make_resnet34(num_classes: int, dry_run=False):
         block=BasicBlock,
         layers=[3, 4, 6, 3],
         num_classes=num_classes,
-        dry_run=dry_run
+        debug=dry_run
     )
 
 
