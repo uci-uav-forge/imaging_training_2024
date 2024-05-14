@@ -123,7 +123,7 @@ class YoloReader:
         if self.prediction_task == PredictionTask.SEGMENTATION and (len(split) - 1) % 2:
             raise ValueError(f"Got odd number of points in label line: {label_line}")
 
-        classname = self.classes[int(split[0])]
+        classname = int(split[0])
 
         if self.prediction_task == PredictionTask.DETECTION:
             location_data = YoloBbox(*map(float, split[1:]))

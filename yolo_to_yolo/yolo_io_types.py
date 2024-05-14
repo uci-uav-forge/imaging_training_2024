@@ -93,6 +93,7 @@ class DatasetDescriptor(NamedTuple):
 
         num_classes = data['nc']
         classnames = data['names']
+
         if num_classes != len(data['names']):
             raise ValueError(
                 f"Number of classes does not match between `nc` ({num_classes}) and `names` ({classnames})"
@@ -103,7 +104,7 @@ class DatasetDescriptor(NamedTuple):
             YoloSubsetDirs.from_task_dir(train_dir),
             YoloSubsetDirs.from_task_dir(val_dir),
             YoloSubsetDirs.from_task_dir(test_dir),
-            tuple(classnames)
+            classnames
         )
 
 
