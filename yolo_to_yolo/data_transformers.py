@@ -107,15 +107,6 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 if best_char_label:
                     new_labels.append(YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=best_char_label.classname))
 
-                # Create labels (but not the whole image) (commented out because I think I'm supposed to yield the whole image as the pos)
-
-                # Calculate new relative bounding box coordinates within the cropped image
-                # new_shape_bbox = self._adjust_bbox(shape_bbox, x1, y1, x2 - x1, y2 - y1, img_width, img_height)
-                # new_labels = [YoloLabel(location=new_shape_bbox, classname=shape_label.classname)]
-                # if best_char_label:
-                #     new_char_bbox = self._adjust_bbox(best_char_label.location, x1, y1, x2 - x1, y2 - y1, img_width, img_height)
-                #     new_labels.append(YoloLabel(location=new_char_bbox, classname=best_char_label.classname))
-
                 # Make new image data to yield
                 new_img_data = YoloImageData(
                     img_id=f"{input_data.img_id}_{shape_label.classname}",
