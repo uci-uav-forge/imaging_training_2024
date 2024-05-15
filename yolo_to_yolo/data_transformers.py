@@ -50,10 +50,17 @@ class ShapeTargetsOnly(YoloDataTransformer):
 class BBoxToCropTransformer(YoloDataTransformer):
     """
     Converts bounding box labels to cropped images
+
+    Args:
+    min_size: Minimum size of the cropped image (width, height)
+    min_padding: Padding to add around the bounding box
+    min_char_overlap: Minimum overlap between shape and character bounding boxes to consider them a match (0 to 1)
+        (This is used to filter out char bboxes that don't overlap enough with the shape bboxes. Default is 0, meaning it just has to overlap a little bit to be considered a match)
     """
-    def __init__(self, min_size: tuple[int, int] = (0, 0), min_padding: int = 0):
+    def __init__(self, min_size: tuple[int, int] = (0, 0), min_padding: int = 0, min_char_overlap: float = 0):
         self.min_size = min_size
         self.min_padding = min_padding
+        self.min_char_overlap = min_char_overlap
 
     def __call__(self, input_data: YoloImageData) -> Iterable[YoloImageData]:
         img_height, img_width = input_data.image.shape[:2]
@@ -66,7 +73,7 @@ class BBoxToCropTransformer(YoloDataTransformer):
             if isinstance(shape_label.location, YoloBbox):
                 shape_bbox = shape_label.location
                 best_char_label = None
-                best_overlap = 0 # you can increase this up to 1 to make overlaps more "strict" (boxes will have to overlap more to be considered as a match)
+                best_overlap = self.min_char_overlap
 
                 # Find best match for character bbox (basically the one that overlaps the most with the shape bbox)
                 for char_label in char_labels:

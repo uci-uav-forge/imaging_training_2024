@@ -3,6 +3,7 @@ import cv2
 from data_types import YoloBbox, YoloLabel, YoloImageData
 from yolo_io_types import Task
 from data_transformers import BBoxToCropTransformer
+import os
 
 # NOTE: If you change the bboxes and the cv2 imshow window thingies have large gray chunks, that's just a cv2 thing that happens if the image is too small. You can save it to a file instead to see it properly.
 
@@ -47,24 +48,27 @@ def main():
     ]
     img_data = YoloImageData(img_id="test_image", task=task, image=image, labels=labels)
 
-    transformer = BBoxToCropTransformer(min_size=(50, 50), min_padding=10)
+    transformer = BBoxToCropTransformer(min_size=(50, 50), min_padding=10, min_char_overlap=0.05)
     transformed_data = list(transformer(img_data))
 
-    # show og image
-    cv2.imshow('Original Image', img_data.image)
+    # Create a folder to save the images to. If the folder exists, make a new one (e.g. add a number to the folder name)
+    base_folder_name = "transformer_output"
+    run_num = 1
+    while os.path.exists(f"{base_folder_name}_{run_num}"):
+        run_num += 1
+    folder_name = f"{base_folder_name}_{run_num}"
+    os.makedirs(folder_name)
 
-    # show cropped images
+    # Save og img
+    cv2.imwrite(f"{folder_name}/original.png", img_data.image)
+
+
+    # save other images
     for i, data in enumerate(transformed_data):
         resized_cropped_image = resize_image(data.image)
-        cv2.imshow(f'Cropped Image {i}', resized_cropped_image)
+        cv2.imwrite(f"{folder_name}/cropped_{i}.png", data.image)
+        print("Wrote to", f"{folder_name}/cropped_{i}.png")
         print(f'Image ID: {data.img_id}, Classes: {[label.classname for label in data.labels]}')
-
-    print("\n\nThe cropped images should each either have just a blue rectangle (shape) or both a blue and green rectangle (shape and character) inside it.")
-    print("It is expected that there is one random green box, this is to text excluding characters not inside shapes.")
-    print("\n\n[Press any key (while focusing one of the output windows) to close the windows]")
-
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

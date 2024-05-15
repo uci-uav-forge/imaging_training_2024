@@ -13,6 +13,7 @@ issac_to_yolo/sample_yolo_dataset
 # data
 /data*/*/
 YOLO_*/
+transformer_output*/
 
 # don't ignore yolo_to_yolo (it matches the above pattern and isn't just a dataset)
 !yolo_to_yolo/
