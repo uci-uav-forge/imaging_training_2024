@@ -6,8 +6,8 @@ from PIL import Image
 
 from yolo_to_yolo.generic_reader import GenericYoloReader
 
-from .data_types import YoloImageData, YoloLabel, YoloBbox, DatasetDescriptor
-from .yolo_io_types import Task, PredictionTask
+from .data_types import YoloImageData, YoloLabel, YoloBbox
+from .yolo_io_types import DatasetDescriptor, Task, PredictionTask
 
 
 class GodotMultiLabelReader(GenericYoloReader):

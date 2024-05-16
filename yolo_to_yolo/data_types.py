@@ -1,10 +1,8 @@
 from typing import NamedTuple
 
 import numpy as np
-from pathlib import Path
-from typing import Generator
 
-from .yolo_io_types import Task, PredictionTask, YoloSubsetDirs, DatasetDescriptor
+from .yolo_io_types import Task
 
 
 class Point(NamedTuple):
