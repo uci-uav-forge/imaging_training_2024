@@ -8,10 +8,10 @@ from PIL import Image
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
+from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, Task, ClassnameMap, GenericYoloReader
 
 
-class YoloReader:
+class YoloReader(GenericYoloReader):
     """
     Reader for YOLO training data.
 
@@ -26,33 +26,8 @@ class YoloReader:
         prediction_task: PredictionTask,
         num_workers: int = int(multiprocessing.cpu_count()) - 1
     ) -> None:
-        self.prediction_task = prediction_task
+        super().__init__(yaml_path, prediction_task)
         self.num_workers = num_workers
-
-        self.yaml_path = yaml_path
-
-        self.descriptor = DatasetDescriptor.from_yaml(self.yaml_path)
-        self.descriptor.check_dirs_exist()
-
-    @property
-    def parent_dir(self) -> Path:
-        return self.descriptor.parent_dir
-
-    @property
-    def train_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.train_dirs
-
-    @property
-    def val_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.val_dirs
-
-    @property
-    def test_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.test_dirs
-
-    @property
-    def classes(self) -> tuple[str, ...]:
-        return self.descriptor.classes
 
     def read(
         self,
