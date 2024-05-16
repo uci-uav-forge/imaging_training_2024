@@ -16,7 +16,6 @@ if __name__ == "__main__":
 
     reader = GodotMultiLabelReader(
         Path(yaml_path),
-        PredictionTask.CLASSIFICATION
     )
 
     i= 0

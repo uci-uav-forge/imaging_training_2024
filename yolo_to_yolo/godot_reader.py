@@ -20,9 +20,8 @@ class GodotMultiLabelReader(GenericYoloReader):
     def __init__(
         self,
         yaml_path: Path,
-        prediction_task: PredictionTask,
     ) -> None:
-        self.prediction_task = prediction_task
+        self.prediction_task = PredictionTask.CLASSIFICATION
 
         self.yaml_path = yaml_path
 
