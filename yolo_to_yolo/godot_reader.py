@@ -1,15 +1,11 @@
-from itertools import repeat
 from pathlib import Path
 from typing import Iterable, Generator
-import multiprocessing
 
 import numpy as np
 from PIL import Image
-from tqdm import tqdm
 
-from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap, GenericYoloReader
-from data_transformers import BBoxToCropTransformer
+from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox
+from yolo_to_yolo.yolo_io_types import Task, GenericYoloReader
 
 
 class GodotMultiLabelReader(GenericYoloReader):
@@ -26,7 +22,6 @@ class GodotMultiLabelReader(GenericYoloReader):
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
         img_file_pattern: str = "*.png"
     ) -> Generator[YoloImageData, None, None]:
-        tiling_transformer = BBoxToCropTransformer()
         id = 0
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
