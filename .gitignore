@@ -13,7 +13,9 @@ issac_to_yolo/sample_yolo_dataset
 # data
 /data*/*/
 YOLO_*/
+!yolo_to_yolo/
 
 # IDE
 .idea/
 .vscode/
+Anaconda Prompt for uav_forge_imaging thingy.lnk
