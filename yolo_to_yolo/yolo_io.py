@@ -8,7 +8,8 @@ from PIL import Image
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, Task, ClassnameMap, GenericYoloReader
+from yolo_to_yolo.generic_reader import GenericYoloReader
+from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, Task, ClassnameMap
 
 
 class YoloReader(GenericYoloReader):

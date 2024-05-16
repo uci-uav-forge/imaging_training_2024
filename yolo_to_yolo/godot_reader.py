@@ -4,7 +4,9 @@ from typing import Iterable, Generator
 import numpy as np
 from PIL import Image
 
-from .data_types import YoloImageData, YoloLabel, YoloBbox, GenericYoloReader, DatasetDescriptor
+from yolo_to_yolo.generic_reader import GenericYoloReader
+
+from .data_types import YoloImageData, YoloLabel, YoloBbox, DatasetDescriptor
 from .yolo_io_types import Task, PredictionTask
 
 
