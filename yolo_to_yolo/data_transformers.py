@@ -56,6 +56,7 @@ class BBoxToCropTransformer(YoloDataTransformer):
     min_padding: Padding to add around the bounding box
     min_char_overlap: Minimum overlap between shape and character bounding boxes to consider them a match (0 to 1)
         (This is used to filter out char bboxes that don't overlap enough with the shape bboxes. Default is 0, meaning it just has to overlap a little bit to be considered a match)
+        NOTE: SUPER sensitive when I tried it on test data, even 0.01 was too high for some of the bboxes 
     """
     def __init__(self, min_size: tuple[int, int] = (0, 0), min_padding: int = 0, min_char_overlap: float = 0):
         self.min_size = min_size

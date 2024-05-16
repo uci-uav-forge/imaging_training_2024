@@ -37,7 +37,7 @@ class YoloLabel(NamedTuple):
 
     @property
     def class_type(self) -> YoloClassType:
-        if self.classname in ("circle", "semicircle", "quarter circle", "triangle", "rectangle", "pentagon", "star", "cross"):
+        if self.classname in ("circle", "semicircle", "quarter circle", "quartercircle", "quarter_circle", "triangle", "rectangle", "pentagon", "star", "cross"):
             return YoloClassType.SHAPE
         elif len(self.classname) == 1:
             return YoloClassType.CHARACTER

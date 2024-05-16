@@ -1,74 +1,70 @@
 import numpy as np
 import cv2
+from typing import List
 from data_types import YoloBbox, YoloLabel, YoloImageData
 from yolo_io_types import Task
 from data_transformers import BBoxToCropTransformer
 import os
+import json
 
-# NOTE: If you change the bboxes and the cv2 imshow window thingies have large gray chunks, that's just a cv2 thing that happens if the image is too small. You can save it to a file instead to see it properly.
-
-def create_test_image():
-    image = np.random.randint(0, 256, (500, 500, 3), dtype=np.uint8)
-
-    cv2.rectangle(image, (100, 100), (200, 200), (255, 0, 0), 2)  # Single shape (no character inside)
-    cv2.rectangle(image, (220, 220), (235, 235), (0, 255, 0), 2) # Random character not inside any shape
-
-    cv2.rectangle(image, (250, 250), (350, 350), (255, 0, 0), 2)  # Shape
-    cv2.rectangle(image, (275, 275), (325, 325), (0, 255, 0), 2)  # Character inside shape
-
-    cv2.rectangle(image, (50, 250), (150, 350), (255, 0, 0), 2)   # Shape
-    cv2.rectangle(image, (100, 300), (180, 380), (0, 255, 0), 2)  # Character partially overlapping shape
-
-    cv2.rectangle(image, (250, 50), (350, 150), (255, 0, 0), 2)   # Shape
-    cv2.rectangle(image, (300, 100), (380, 180), (0, 255, 0), 2)  # Character partially overlapping shape
-
-    return image
-
-def resize_image(image, min_display_size=(100, 100)):
-    height, width = image.shape[:2]
-    new_height, new_width = max(height, min_display_size[0]), max(width, min_display_size[1])
-    resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
-    return resized_image
+# DESIGNED TO BE USED WITH "isaac_data_split_500_2-8-24.zip"
 
 def main():
-    image = create_test_image()
     task = Task('test') 
-    labels = [
-        YoloLabel(location=YoloBbox(x=0.3, y=0.3, w=0.2, h=0.2), classname="circle"), # Single shape
-        YoloLabel(location=YoloBbox(x=0.455, y=0.455, w=0.03, h=0.03), classname="a"), # Random character
-
-        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.2, h=0.2), classname="rectangle"),
-        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.1, h=0.1), classname="b"),
-
-        YoloLabel(location=YoloBbox(x=0.2, y=0.6, w=0.2, h=0.2), classname="star"),
-        YoloLabel(location=YoloBbox(x=0.28, y=0.68, w=0.16, h=0.16), classname="c"),
-
-        YoloLabel(location=YoloBbox(x=0.6, y=0.2, w=0.2, h=0.2), classname="cross"),
-        YoloLabel(location=YoloBbox(x=0.68, y=0.28, w=0.16, h=0.16), classname="d"),
-    ]
-    img_data = YoloImageData(img_id="test_image", task=task, image=image, labels=labels)
-
-    transformer = BBoxToCropTransformer(min_size=(50, 50), min_padding=10, min_char_overlap=0.05)
-    transformed_data = list(transformer(img_data))
 
     # Create a folder to save the images to. If the folder exists, make a new one (e.g. add a number to the folder name)
-    base_folder_name = "transformer_output"
+    base_folder_name = "data/transformer_output"
     run_num = 1
     while os.path.exists(f"{base_folder_name}_{run_num}"):
         run_num += 1
-    folder_name = f"{base_folder_name}_{run_num}"
-    os.makedirs(folder_name)
+    master_folder_name = f"{base_folder_name}_{run_num}"
+    os.makedirs(master_folder_name)
 
-    # Save og img
-    cv2.imwrite(f"{folder_name}/original.png", img_data.image)
+    # Start processing the data and saving the images
+    transformer = BBoxToCropTransformer(min_size=(50, 50), min_padding=10, min_char_overlap=0)
+    read_dir = "data/isaac_data_split_500_2-8-24"
+    for file in os.listdir(read_dir):
+        if file.endswith(".png") and file.startswith("rgb_"):
+            id = file.split(".")[0].split("_")[-1]
+            print(f"Processing {id}")
+            image = cv2.imread(f"{read_dir}/{file}")
+            height, width, _ = image.shape
+            bboxes_raw = np.load(f"{read_dir}/bounding_box_2d_tight_{id}.npy")
+            with open(f"{read_dir}/bounding_box_2d_tight_labels_{id}.json", "r") as f:
+                labels_raw = json.load(f) # sample: {"0": {"class": "background"}, "5": {"class": "quartercircle"}, "8": {"class": "rectangle"}, "9": {"class": "semicircle"}, "10": {"class": "n"}, "15": {"class": "z"}}
+            # filter bboxes that are not of relevant types based on labels
+            yolo_labels: List[YoloLabel] = []
+            for bbox in bboxes_raw:
+                className = labels_raw[str(bbox[0])]["class"]
+                if className in ("circle", "semicircle", "quarter circle", "quartercircle", "quarter_circle", "triangle", "rectangle", "pentagon", "star", "cross") or len(className) == 1:
+                    # transform bbox pixel coords to float relative coords
+                    # xmin (1), ymin (2), xmax (3), ymax (4) -> x, y, w, h
+                    xmin, ymin, xmax, ymax = bbox[1], bbox[2], bbox[3], bbox[4]
+                    x = (xmin + xmax) / 2.0 / width
+                    y = (ymin + ymax) / 2.0 / height
+                    w = (xmax - xmin) / width
+                    h = (ymax - ymin) / height
+                    yolo_labels.append(YoloLabel(YoloBbox(x, y, w, h), className))
+            img_data = YoloImageData(img_id=file, task=task, image=image, labels=yolo_labels)
+            transformed_data = list(transformer(img_data))
 
+            # Make a new folder (in the master folder) for this image 
+            img_folder_name = f"{master_folder_name}/{id}"
+            os.makedirs(img_folder_name)
 
-    # save other images
-    for i, data in enumerate(transformed_data):
-        resized_cropped_image = resize_image(data.image)
-        cv2.imwrite(f"{folder_name}/cropped_{i}.png", data.image)
-        print("Wrote to", f"{folder_name}/cropped_{i}.png")
-        print(f'Image ID: {data.img_id}, Classes: {[label.classname for label in data.labels]}')
+            # Save og image
+            cv2.imwrite(f"{img_folder_name}/original.png", img_data.image)
+
+            # save other images
+            for i, data in enumerate(transformed_data):
+                cv2.imwrite(f"{img_folder_name}/cropped_{i}.png", data.image)
+                # print("Wrote to", f"{img_folder_name}/cropped_{i}.png")
+                # print(f'Image ID: {data.img_id}, Classes: {[label.classname for label in data.labels]}')
+            # write the labels to a file
+            with open(f"{img_folder_name}/labels.txt", "w") as f:
+                for i, data in enumerate(transformed_data):
+                    f.write(f"Image ID: {data.img_id}, Classes: {[label.classname for label in data.labels]}\n")
+    
 
 if __name__ == "__main__":
     main()
