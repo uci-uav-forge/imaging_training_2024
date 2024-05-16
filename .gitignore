@@ -11,6 +11,8 @@ issac_to_yolo/sample_yolo_dataset
 *.code-workspace
 
 # data
+/data/*
+!data/readme.md
 /data*/*/
 YOLO_*/
 transformer_output*/
@@ -21,5 +23,4 @@ transformer_output*/
 # IDE
 .idea/
 .vscode/
-Anaconda Prompt for uav_forge_imaging thingy.lnk
-data/isaac_data_split_500_2-8-24.zip
+*.lnk
