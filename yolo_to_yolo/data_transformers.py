@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Iterable
 
-from data_types import YoloImageData, YoloLabel, YoloBbox
+from data_types import YoloImageData, YoloClassType, YoloLabel, YoloBbox, YoloOutline
 
 
 class YoloDataTransformer(ABC):
@@ -65,9 +65,8 @@ class BBoxToCropTransformer(YoloDataTransformer):
     def __call__(self, input_data: YoloImageData) -> Iterable[YoloImageData]:
         img_height, img_width = input_data.image.shape[:2]
         
-        # I hope this is right
-        shape_labels = [label for label in input_data.labels if "shape" in label.classname]
-        char_labels = [label for label in input_data.labels if "character" in label.classname]
+        shape_labels = [label for label in input_data.labels if label.class_type == YoloClassType.SHAPE]
+        char_labels = [label for label in input_data.labels if label.class_type == YoloClassType.CHARACTER]
         
         for shape_label in shape_labels:
             if isinstance(shape_label.location, YoloBbox):
@@ -79,13 +78,17 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 for char_label in char_labels:
                     if isinstance(char_label.location, YoloBbox):
                         char_bbox = char_label.location
-                        overlap = self._calculate_iou(shape_bbox, char_bbox)
+                        overlap = BBoxToCropTransformer._calculate_iou(shape_bbox, char_bbox)
 
                         if overlap > best_overlap:
                             best_overlap = overlap
                             best_char_label = char_label
 
-                x1, y1, x2, y2 = self._get_combined_bbox(shape_bbox, best_char_label, img_width, img_height)
+                if best_char_label is None:
+                    print(f'WARNING: No character bbox found for object of class "{shape_label.classname}", skipping!')
+                    continue
+
+                x1, y1, x2, y2 = BBoxToCropTransformer._get_combined_bbox(shape_bbox, best_char_label, img_width, img_height)
 
                 # print(f"Combined BBox for {shape_label.classname}: ({x1}, {y1}) to ({x2}, {y2})")
 
@@ -103,9 +106,7 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 # print(f"Cropped Image Shape for {shape_label.classname}: {cropped_image.shape}")
 
                 # Create new labels for the cropped image
-                new_labels = [YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=shape_label.classname)]
-                if best_char_label:
-                    new_labels.append(YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=best_char_label.classname))
+                new_labels = [YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=shape_label.classname), YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=best_char_label.classname)]
 
                 # Make new image data to yield
                 new_img_data = YoloImageData(
@@ -117,7 +118,8 @@ class BBoxToCropTransformer(YoloDataTransformer):
 
                 yield new_img_data
 
-    def _calculate_iou(self, bbox1: YoloBbox, bbox2: YoloBbox) -> float:
+    @staticmethod
+    def _calculate_iou(bbox1: YoloBbox, bbox2: YoloBbox) -> float:
         """
         Calculate Intersection over Union (IoU) for two bounding boxes (this is basically an "overlap score")
         """
@@ -139,9 +141,10 @@ class BBoxToCropTransformer(YoloDataTransformer):
             return iou
         return 0.0
 
-    def _get_combined_bbox(self, shape_bbox: YoloBbox, char_label: YoloLabel, img_width: int, img_height: int) -> tuple[int, int, int, int]:
+    @staticmethod
+    def _get_combined_bbox(shape_bbox: YoloBbox, char_label: YoloLabel, img_width: int, img_height: int) -> tuple[int, int, int, int]:
         """
-        Get the smallest bbox that contains both the shape and character bboxes
+        Get the smallest bbox that contains both the shape and character bboxes.
         """
         x_center, y_center, bbox_width, bbox_height = shape_bbox
         x1 = int((x_center - bbox_width / 2) * img_width)
@@ -150,12 +153,22 @@ class BBoxToCropTransformer(YoloDataTransformer):
         y2 = int((y_center + bbox_height / 2) * img_height)
 
         if char_label:
-            char_bbox = char_label.location
-            char_x_center, char_y_center, char_bbox_width, char_bbox_height = char_bbox
-            char_x1 = int((char_x_center - char_bbox_width / 2) * img_width)
-            char_y1 = int((char_y_center - char_bbox_height / 2) * img_height)
-            char_x2 = int((char_x_center + char_bbox_width / 2) * img_width)
-            char_y2 = int((char_y_center + char_bbox_height / 2) * img_height)
+            char_location = char_label.location
+            if isinstance(char_location, YoloBbox):
+                char_x_center, char_y_center, char_bbox_width, char_bbox_height = char_location
+                char_x1 = int((char_x_center - char_bbox_width / 2) * img_width)
+                char_y1 = int((char_y_center - char_bbox_height / 2) * img_height)
+                char_x2 = int((char_x_center + char_bbox_width / 2) * img_width)
+                char_y2 = int((char_y_center + char_bbox_height / 2) * img_height)
+            elif isinstance(char_location, YoloOutline):
+                # Get the smallest bbox that contains all the points in the outline
+                points = char_location.points
+                char_x1 = int(min(point.x for point in points) * img_width)
+                char_y1 = int(min(point.y for point in points) * img_height)
+                char_x2 = int(max(point.x for point in points) * img_width)
+                char_y2 = int(max(point.y for point in points) * img_height)
+            else:
+                raise TypeError("char_label.location is supposed to be a YoloBbox or YoloOutline but wasn't")
 
             x1 = min(x1, char_x1)
             y1 = min(y1, char_y1)
@@ -163,8 +176,10 @@ class BBoxToCropTransformer(YoloDataTransformer):
             y2 = max(y2, char_y2)
 
         return x1 + 1, y1 + 1, x2, y2
+
     
-    def _adjust_bbox(self, bbox: YoloBbox, crop_x1: int, crop_y1: int, crop_width: int, crop_height: int, img_width: int, img_height: int) -> YoloBbox:
+    @staticmethod
+    def _adjust_bbox(bbox: YoloBbox, crop_x1: int, crop_y1: int, crop_width: int, crop_height: int, img_width: int, img_height: int) -> YoloBbox:
         """
         Adjust the bounding box coordinates to be relative to the cropped image.
         (currently unused but we might need it later, it's called in a piece of commented code in __call__)

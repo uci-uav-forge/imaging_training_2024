@@ -34,17 +34,17 @@ def main():
     image = create_test_image()
     task = Task('test') 
     labels = [
-        YoloLabel(location=YoloBbox(x=0.3, y=0.3, w=0.2, h=0.2), classname="shape"), # Single shape
-        YoloLabel(location=YoloBbox(x=0.455, y=0.455, w=0.03, h=0.03), classname="character"), # Random character
+        YoloLabel(location=YoloBbox(x=0.3, y=0.3, w=0.2, h=0.2), classname="circle"), # Single shape
+        YoloLabel(location=YoloBbox(x=0.455, y=0.455, w=0.03, h=0.03), classname="a"), # Random character
 
-        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.2, h=0.2), classname="shape"),
-        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.1, h=0.1), classname="character"),
+        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.2, h=0.2), classname="rectangle"),
+        YoloLabel(location=YoloBbox(x=0.6, y=0.6, w=0.1, h=0.1), classname="b"),
 
-        YoloLabel(location=YoloBbox(x=0.2, y=0.6, w=0.2, h=0.2), classname="shape"),
-        YoloLabel(location=YoloBbox(x=0.28, y=0.68, w=0.16, h=0.16), classname="character"),
+        YoloLabel(location=YoloBbox(x=0.2, y=0.6, w=0.2, h=0.2), classname="star"),
+        YoloLabel(location=YoloBbox(x=0.28, y=0.68, w=0.16, h=0.16), classname="c"),
 
-        YoloLabel(location=YoloBbox(x=0.6, y=0.2, w=0.2, h=0.2), classname="shape"),
-        YoloLabel(location=YoloBbox(x=0.68, y=0.28, w=0.16, h=0.16), classname="character"),
+        YoloLabel(location=YoloBbox(x=0.6, y=0.2, w=0.2, h=0.2), classname="cross"),
+        YoloLabel(location=YoloBbox(x=0.68, y=0.28, w=0.16, h=0.16), classname="d"),
     ]
     img_data = YoloImageData(img_id="test_image", task=task, image=image, labels=labels)
 
