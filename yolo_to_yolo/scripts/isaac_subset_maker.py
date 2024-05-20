@@ -48,7 +48,6 @@ def main() -> None:
     """
     Main function to handle user input and orchestrate the copying of files.
     """
-    print("scripts.py is just for creating subsets of datasets at the moment")
     input_dir = prompt_for_directory("Select Input Directory")
     if not input_dir:
         print("No input directory selected. Exiting.")
