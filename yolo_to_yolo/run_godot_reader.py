@@ -20,8 +20,8 @@ if __name__ == "__main__":
 
     i= 0
     for data in reader.read():
-        cv.imwrite(f"{out_dir}/images/{data.img_id}.png", data.image)
-        with open(f"{out_dir}/labels/{data.img_id}.txt", "w+") as f:
+        cv.imwrite(f"{out_dir}/images/{data.task}/{data.img_id}.png", data.image)
+        with open(f"{out_dir}/labels/{data.task}/{data.img_id}.txt", "w+") as f:
             f.write(" ".join(label.classname for label in data.labels))
         i+=1
         if i>100:
