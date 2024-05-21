@@ -36,53 +36,37 @@ class GodotMultiLabelReader(GenericYoloReader):
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
         img_file_pattern: str = "*.png"
     ) -> Generator[YoloImageData, None, None]:
-        id = 0
         for task in tasks:
-            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            images_dir, _ = self.descriptor.get_image_and_labels_dirs(task)
             images_dir = Path(str(images_dir).replace(task.value,"$TASK").replace("images", task.value).replace("$TASK","images"))
-            print(images_dir)
             image_paths: Iterable[Path] = images_dir.glob(img_file_pattern)
-
-
             for img_path in image_paths:
-                image = np.array(Image.open(img_path))
-                img_h, img_w = image.shape[:2]
-                img_id = self._get_id_from_filename(img_path)
-                _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
-                labels_path = labels_dir / f'{img_id}.txt'
-                labels_path = str(labels_path).replace(task.value,"$TASK").replace("labels", task.value).replace("$TASK","labels")
-                with open(labels_path, 'r') as f:
-                    for line in f.readlines():
-                        shape_name, char_name, shape_col, letter_col, x, y, w, h = line.split()
-                        x, y, w, h = map(float, (x, y, w, h))
-                        x_pix, y_pix, w_pix, h_pix = map(int, (x*img_w, y*img_h, w*img_w, h*img_h))
-                        crop_img = image[y_pix - h_pix//2:y_pix + h_pix//2,x_pix - w_pix//2:x_pix + w_pix//2]
+                yield self._process_img_path(img_path, task)
+    
+    def _process_img_path(self, img_path: Path, task) -> YoloImageData:
+            image = np.array(Image.open(img_path))
+            img_id = self._get_id_from_filename(img_path)
+            _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            labels_path = labels_dir / f'{img_id}.txt'
+            labels_path = str(labels_path).replace(task.value,"$TASK").replace("labels", task.value).replace("$TASK","labels")
+            labels: list[YoloLabel] = []
+            with open(labels_path, 'r') as f:
+                for line in f.readlines():
+                    shape_name, char_name, shape_col, letter_col, x, y, w, h = line.split()
+                    x, y, w, h = map(float, (x, y, w, h))
+                    for class_name in [shape_name, char_name, shape_col, letter_col]:
+                        labels.append(YoloLabel(
+                            location = YoloBbox(x=x, y=y, w=w, h=h),
+                            classname = class_name
+                        ))
+            img_data = YoloImageData(
+                img_id = img_id,
+                task = task,
+                image = image,
+                labels = labels
+            )
+            return img_data
 
-                        img_data = YoloImageData(
-                            img_id = str(id),
-                            task = task,
-                            image = crop_img,
-                            labels = [
-                                YoloLabel(
-                                    location = YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0),
-                                    classname = shape_name
-                                ),
-                                YoloLabel(
-                                    location = YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0),
-                                    classname = char_name
-                                ),
-                                YoloLabel(
-                                    location = YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0),
-                                    classname = shape_col
-                                ),
-                                YoloLabel(
-                                    location = YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0),
-                                    classname = letter_col
-                                )
-                            ]
-                        )
-                        id+=1
-                        yield img_data
     @staticmethod
     def _get_id_from_filename(filename: Path) -> str:
         return filename.stem
