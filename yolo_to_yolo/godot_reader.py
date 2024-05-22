@@ -8,64 +8,92 @@ from yolo_to_yolo.generic_reader import GenericYoloReader
 
 from .data_types import YoloImageData, YoloLabel, YoloBbox
 from .yolo_io_types import DatasetDescriptor, Task, PredictionTask
+from .godot_utils import get_polygon, give_normalized_bounding_box
+import os
 
 
-class GodotMultiLabelReader(GenericYoloReader):
+class GodotReader:
     """
     Reader for YOLO training data.
 
+    Outputs a box for each different label (so 4 boxes per target). Needs to be pipelined
+    into a data transformer that will group the boxes and filter labels to be used in training.
+
     Example:
-        reader = YoloReader("YOLO_DATASET/data.yaml")
-        for yolo_image_data, task in reader:
-            ...
+        reader = GodotReader("/datasets/godot_raw/godot_data_0", PredictionTask.DETECTION)
+        writer = YoloWriter("/datasets/godot_processed/0", PredictionTask.DETECTION)
+        writer.write(reader.read())
     """
     def __init__(
         self,
-        yaml_path: Path,
+        dataset_folder_path: Path,
+        split_proportions: tuple[float,float,float] = (0.7, 0.2, 0.1)
     ) -> None:
-        self.prediction_task = PredictionTask.CLASSIFICATION
-
-        self.yaml_path = yaml_path
-
-        self.descriptor = DatasetDescriptor.from_yaml(self.yaml_path)
-        # same as superclass constructor but without path checking because we need to swap order
-        # of task and directory (e.g. train/images -> images/train)
+        self.dataset_folder_path = dataset_folder_path
+        self.split_proportions = split_proportions
 
     def read(
         self,
-        tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
-        img_file_pattern: str = "*.png"
     ) -> Generator[YoloImageData, None, None]:
-        for task in tasks:
-            images_dir, _ = self.descriptor.get_image_and_labels_dirs(task)
-            images_dir = Path(str(images_dir).replace(task.value,"$TASK").replace("images", task.value).replace("$TASK","images"))
-            image_paths: Iterable[Path] = images_dir.glob(img_file_pattern)
-            for img_path in image_paths:
-                yield self._process_img_path(img_path, task)
+        num_imgs = os.listdir(self.dataset_folder_path / "images")
+        for i in range(len(num_imgs)):
+            progress = i / len(num_imgs)
+            img_path = self.dataset_folder_path / "images" / f"image{i}.png"
+            masks_path = self.dataset_folder_path / "masks" / f"{i}"
+            if progress < self.split_proportions[0]:
+                task = Task.TRAIN
+            elif progress < self.split_proportions[0] + self.split_proportions[1]:
+                task = Task.VAL
+            else:
+                task = Task.TEST
+            yield self._process_img_path(img_path, masks_path, task, i)
     
-    def _process_img_path(self, img_path: Path, task) -> YoloImageData:
-            image = np.array(Image.open(img_path))
-            img_id = self._get_id_from_filename(img_path)
-            _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
-            labels_path = labels_dir / f'{img_id}.txt'
-            labels_path = str(labels_path).replace(task.value,"$TASK").replace("labels", task.value).replace("$TASK","labels")
-            labels: list[YoloLabel] = []
-            with open(labels_path, 'r') as f:
-                for line in f.readlines():
-                    shape_name, char_name, shape_col, letter_col, x, y, w, h = line.split()
-                    x, y, w, h = map(float, (x, y, w, h))
-                    for class_name in [shape_name, char_name, shape_col, letter_col]:
-                        labels.append(YoloLabel(
-                            location = YoloBbox(x=x, y=y, w=w, h=h),
-                            classname = class_name
-                        ))
-            img_data = YoloImageData(
-                img_id = img_id,
-                task = task,
-                image = image,
-                labels = labels
+    def _process_img_path(self, img_path: Path, masks_path: Path, task: Task, id: int) -> YoloImageData:
+        image = np.array(Image.open(img_path))
+        data_labels = []
+        for mask_fname in os.listdir(masks_path):
+            # file names will be like shape_name,letter_name,shape_col,letter_col_index.png
+            mask_path = masks_path / mask_fname
+            mask = np.array(Image.open(mask_path))
+            polygon = get_polygon(mask)
+            bbox = give_normalized_bounding_box(polygon)
+            labels, index = mask_fname.split("_")
+            if labels == 'person':
+                data_labels.append(
+                    YoloLabel(
+                        location=bbox,
+                        classname=labels
+                    )
+                )
+                continue
+            shape_name, letter_name, shape_col, letter_col = labels.split(",")
+            data_labels.extend([
+                    YoloLabel(
+                        location=bbox,
+                        classname=shape_name
+                    ),
+                    YoloLabel(
+                        location=bbox,
+                        classname=letter_name
+                    ),
+                    YoloLabel(
+                        location=bbox,
+                        classname=f"shape:{shape_col}"
+                    ),
+                    YoloLabel(
+                        location=bbox,
+                        classname=f"char:{letter_col}"
+                    )
+                ] 
             )
-            return img_data
+        return YoloImageData(
+            img_id=str(id),
+            task=task,
+            image=image,
+            labels=data_labels
+        )
+
+
 
     @staticmethod
     def _get_id_from_filename(filename: Path) -> str:

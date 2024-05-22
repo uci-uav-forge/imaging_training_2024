@@ -1,31 +1,50 @@
-from yolo_to_yolo.godot_reader import GodotMultiLabelReader
+from yolo_to_yolo.godot_reader import GodotReader
+from yolo_to_yolo.yolo_io import YoloWriter
 from yolo_to_yolo.yolo_io_types import PredictionTask
+from yolo_to_yolo.data_types import YoloImageData
 from pathlib import Path
 import cv2 as cv
 import os
 
 # run me with `py -m yolo_to_yolo.run_godot_reader.py`
 if __name__ == "__main__":
-    yaml_path = '/home/forge/eric/uavf_2024/imaging_training_2024/godot_data_utils/yolo/2024-shapes-all-labels.yaml'
+    dataset_id = '1716327957'
+    in_path = f'/datasets/godot_raw/godot_data_{dataset_id}'
+    out_path = f'/datasets/godot_processed/{dataset_id}'
 
-    out_dir = 'cls_dataset'
+    os.makedirs(out_path, exist_ok=True)
 
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(f"{out_dir}/images", exist_ok=True)
-    os.makedirs(f"{out_dir}/labels", exist_ok=True)
-
-    reader = GodotMultiLabelReader(
-        Path(yaml_path),
+    reader = GodotReader(
+        Path(in_path),
     )
 
-    i= 0
-    for data in reader.read():
-        os.makedirs(f"{out_dir}/images/{data.task}", exist_ok=True)
-        os.makedirs(f"{out_dir}/labels/{data.task}", exist_ok=True)
-        cv.imwrite(f"{out_dir}/images/{data.task}/{data.img_id}.png", data.image)
-        with open(f"{out_dir}/labels/{data.task}/{data.img_id}.txt", "w+") as f:
-            f.write(" ".join(label.classname for label in data.labels))
-        i+=1
-        if i>100:
-            break
+    shape_classnames = [
+        "circle",
+        "semicircle",
+        "quarter circle",
+        "triangle",
+        "rectangle",
+        "pentagon",
+        "star",
+        "cross",
+        "person"
+    ]
 
+    only_shape_boxes = map(
+        lambda box: YoloImageData(
+            box.img_id,
+            box.task,
+            box.image,
+            [l for l in box.labels if l.classname in shape_classnames]
+        ),
+        reader.read()
+    )
+
+    writer = YoloWriter(
+        Path(out_path),
+        PredictionTask.DETECTION,
+        shape_classnames,
+    )
+
+    writer.write(reader.read())
+    
