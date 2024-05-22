@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 from dataclasses import dataclass
-
+from .data_types import YoloBbox
 
 def get_polygon(shape_img: cv2.Mat) -> np.ndarray:
     '''
@@ -53,7 +53,7 @@ def get_letter_box(polygon_points: np.ndarray, img_shape: [], letter_label: str)
     return letter_box
                 
                 
-def give_normalized_bounding_box( norm_polygon_array: np.ndarray):
+def give_normalized_bounding_box( norm_polygon_array: np.ndarray) -> YoloBbox:
     '''Returns bounding box as proportion of image dimensions, x_center,y_center,w,h'''
 
     x_coord = norm_polygon_array[:,0]
@@ -70,9 +70,8 @@ def give_normalized_bounding_box( norm_polygon_array: np.ndarray):
     x = (max_x+min_x)/2
     y = (max_y+min_y)/2
 
-    result_string = ' '.join(map(str, [x,y,w,h]))
-
-    return result_string
+    return YoloBbox(x, y, w, h)
+    
 
 def preprocess_img(img):
     # only augment half of them (why? I made this up on a whim.)
