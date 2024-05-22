@@ -175,7 +175,10 @@ class YoloWriter:
         if isinstance(label.location, YoloOutline):
             return f"{class_id} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
 
-        raise ValueError(f"Unknown location annotation type: {label.location}")
+        # need print because raising ValueError doesn't show message when using multiprocessing
+        err_msg = f"Unknown location annotation type: {label.location}"
+        print(err_msg)
+        raise ValueError(err_msg)
 
     def _write_dataset_yaml(self):
         yaml_path = self.out_dir / "data.yaml"
