@@ -3,8 +3,8 @@ from yolo_to_yolo.yolo_io import YoloWriter
 from yolo_to_yolo.yolo_io_types import PredictionTask
 from yolo_to_yolo.data_types import YoloImageData
 from pathlib import Path
-import cv2 as cv
 import os
+from tqdm import tqdm
 
 # run me with `py -m yolo_to_yolo.run_godot_reader.py`
 if __name__ == "__main__":
@@ -46,5 +46,5 @@ if __name__ == "__main__":
         shape_classnames,
     )
 
-    writer.write(reader.read())
+    writer.write(tqdm(only_shape_boxes))
     
