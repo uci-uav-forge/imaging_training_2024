@@ -56,7 +56,8 @@ class GodotReader:
             mask_path = masks_path / mask_fname
             mask = np.array(Image.open(mask_path))
             polygon = get_polygon(mask)
-            bbox = give_normalized_bounding_box(polygon)
+            normalized_polygon = polygon / np.array([mask.shape[1], mask.shape[0]])
+            bbox = give_normalized_bounding_box(normalized_polygon)
             labels, index = mask_fname.split("_")
             if labels == 'person':
                 data_labels.append(
