@@ -3,16 +3,13 @@ from yolo_to_yolo.yolo_io import YoloWriter
 from yolo_to_yolo.yolo_io_types import PredictionTask
 from yolo_to_yolo.data_types import YoloImageData
 from pathlib import Path
-import os
 from tqdm import tqdm
 
 # run me with `py -m yolo_to_yolo.run_godot_reader.py`
 if __name__ == "__main__":
-    dataset_id = '1716327957'
+    dataset_id = 'small_100'
     in_path = f'/datasets/godot_raw/godot_data_{dataset_id}'
     out_path = f'/datasets/godot_processed/{dataset_id}'
-
-    os.makedirs(out_path, exist_ok=True)
 
     reader = GodotReader(
         Path(in_path),
