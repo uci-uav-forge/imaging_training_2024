@@ -58,6 +58,16 @@ class GeneralClassifierTrainer:
         character_color_loss = self.loss_function(character_color_pred, character_color_y) if not character_color_missing else None
         
         return ClassificationLosses(shape_loss, shape_color_loss, character_loss, character_color_loss)
+    
+    def backward(self, losses: ClassificationLosses):
+        """
+        Custom back-propagation for multi-head loss conditional on present/missing labels.
+        
+        Losses not computed (for missing labels) must be None to be skipped.
+        """
+        for loss_value in losses:
+            if loss_value is not None:
+                loss_value.backward()
         
     @staticmethod
     def _labels_to_y(labels: list[ClassificationLabel]) -> resnet_output_t:
