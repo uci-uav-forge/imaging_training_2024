@@ -4,10 +4,11 @@ from typing import Callable, Iterable, NamedTuple
 from torch.nn import functional as F
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from lightning.pytorch.loggers import TensorBoardLogger
 import torch
 import lightning as L
 
-from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS
+from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH
 from imaging_training_2024.yolo_to_yolo.data_types import YoloImageData
 from imaging_training_2024.yolo_to_yolo.yolo_io import YoloReader
 from imaging_training_2024.yolo_to_yolo.yolo_io_types import PredictionTask, Task
@@ -244,13 +245,17 @@ def train(
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
     batch_size: int = BATCH_SIZE,
+    logs_path: Path = Path(LOGS_PATH)
 ):
     """
     Extracted to a function for potential use in CLI.
     Generally, settings should be changed in `default_settings.py`.
     """
     module = GeneralClassifierLightningModule(model, data_yaml, batch_size)
-    trainer = L.Trainer(max_epochs=epochs)
+    
+    logger = TensorBoardLogger(logs_path, name="general_classifier")
+    trainer = L.Trainer(max_epochs=epochs, logger=logger)
+    
     trainer.fit(module)
 
 
