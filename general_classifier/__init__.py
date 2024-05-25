@@ -1,1 +1,1 @@
-from .general_classifier import GeneralClassifier
+from .training import train, GeneralClassifierLightningModule
