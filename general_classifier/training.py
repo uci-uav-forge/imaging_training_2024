@@ -7,9 +7,11 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import lightning as L
 
+from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS
 from imaging_training_2024.yolo_to_yolo.data_types import YoloImageData
 from imaging_training_2024.yolo_to_yolo.yolo_io import YoloReader
 from imaging_training_2024.yolo_to_yolo.yolo_io_types import PredictionTask, Task
+from uavf_2024.imaging.general_classifier.resnet import resnet18
 from uavf_2024.imaging.imaging_types import Character, Color, Shape
 
 
@@ -138,21 +140,19 @@ class GeneralClassifierDataloader(DataLoader):
         return ClassificationLabel(shape, shape_color, character, character_color)
 
 
-class GeneralClassifierTrainer(L.LightningModule):
+class GeneralClassifierLightningModule(L.LightningModule):
     def __init__(
         self, 
         model: nn.Module,
-        train_dataset: GeneralClassifierDataset,
-        val_dataset: GeneralClassifierDataset,
-        test_dataset: GeneralClassifierDataset,
+        yaml_path: Path,
         batch_size: int = 32,
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy
     ):
         self.model = model
         
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
-        self.test_dataset = test_dataset
+        self.train_dataset = GeneralClassifierDataset(yaml_path, Task.TRAIN)
+        self.val_dataset = GeneralClassifierDataset(yaml_path, Task.VAL)
+        self.test_dataset = GeneralClassifierDataset(yaml_path, Task.TEST)
 
         self.batch_size = batch_size
         self.loss_function = loss_function
@@ -237,3 +237,22 @@ class GeneralClassifierTrainer(L.LightningModule):
 
     def test_dataloader(self):
         return GeneralClassifierDataloader(self.test_dataset, self.batch_size)
+
+
+def train(
+    model: nn.Module = resnet18([len(Shape), len(Color), len(Character), len(Color)]),
+    data_yaml: Path = Path(DATA_YAML),
+    epochs: int = EPOCHS,
+    batch_size: int = BATCH_SIZE,
+):
+    """
+    Extracted to a function for potential use in CLI.
+    Generally, settings should be changed in `default_settings.py`.
+    """
+    module = GeneralClassifierLightningModule(model, data_yaml, batch_size)
+    trainer = L.Trainer(max_epochs=epochs)
+    trainer.fit(module)
+
+
+if __name__ == '__main__':
+    train()
