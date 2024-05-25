@@ -21,11 +21,6 @@ class YoloOutline(NamedTuple):
     points: list[Point]
 
 
-class TargetAnnotation(NamedTuple):
-    location: YoloOutline | YoloBbox
-    classname: str
-
-
 class YoloLabel(NamedTuple):
     location: YoloOutline | YoloBbox
     classname: str
