@@ -66,8 +66,7 @@ class YoloReader:
         outputs: list[Iterable[YoloImageData]] = []
 
         for task in tasks:
-            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
-            paths: Iterable[Path] = images_dir.glob(img_file_pattern)
+            paths = self.get_image_paths(task, img_file_pattern)
 
             output: Iterable[YoloImageData] = pool.imap_unordered(
                 self._worker_task,
@@ -83,6 +82,13 @@ class YoloReader:
             yield from output_iterable
 
         pool.join()
+        
+    def get_image_paths(self, task: Task, img_file_pattern: str = r"*.png") -> Iterable[Path]:
+        """
+        Extracted for use by external class in conjunction with `read_single`.
+        """
+        images_dir, _ = self.descriptor.get_image_and_labels_dirs(task)
+        return images_dir.glob(img_file_pattern)
 
     def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData:
         """
@@ -91,10 +97,17 @@ class YoloReader:
         Takes a tuple, so it can be used in `imap_unordered`.
         """
         img_path, task = path_and_task
+        return self.read_single(img_path, task)
+        
+    def read_single(self, path: Path, task: Task) -> YoloImageData:
+        """
+        Public method for reading a single image and its labels.
+        
+        Good for use in PyTorch Dataset where the Dataloader is going to handle parallelization.
+        """
+        image = np.array(Image.open(path))
 
-        image = np.array(Image.open(img_path))
-
-        img_id = self._get_id_from_filename(img_path)
+        img_id = self._get_id_from_filename(path)
         _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
         labels = list(self._get_labels_from_id(img_id, labels_dir))
 
