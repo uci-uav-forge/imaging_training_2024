@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 from torch.nn import functional as F
 import torch.nn as nn
@@ -30,8 +30,13 @@ resnet_output_t = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
 class GeneralClassifierTrainer:
-    def __init__(self, model: nn.Module):
+    def __init__(
+        self, 
+        model: nn.Module, 
+        loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy
+    ):
         self.model = model
+        self.loss_function = loss_function
 
     def forward(self, x: torch.Tensor) -> resnet_output_t:
         return self.model(x)
@@ -47,10 +52,10 @@ class GeneralClassifierTrainer:
         character_missing = not torch.count_nonzero(character_y)
         character_color_missing = not torch.count_nonzero(character_color_y)
 
-        shape_loss = F.cross_entropy(shape_pred, shape_y)
-        shape_color_loss = F.cross_entropy(shape_color_pred, shape_color_y) if not shape_color_missing else None
-        character_loss = F.cross_entropy(character_pred, character_y) if not character_missing else None
-        character_color_loss = F.cross_entropy(character_color_pred, character_color_y) if not character_color_missing else None
+        shape_loss = self.loss_function(shape_pred, shape_y)
+        shape_color_loss = self.loss_function(shape_color_pred, shape_color_y) if not shape_color_missing else None
+        character_loss = self.loss_function(character_pred, character_y) if not character_missing else None
+        character_color_loss = self.loss_function(character_color_pred, character_color_y) if not character_color_missing else None
         
         return ClassificationLosses(shape_loss, shape_color_loss, character_loss, character_color_loss)
         
