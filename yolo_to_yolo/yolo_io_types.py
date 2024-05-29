@@ -91,7 +91,7 @@ class DatasetDescriptor(NamedTuple):
         val_dir = parent / 'valid'
         test_dir = parent / 'test'
 
-        num_classes = data['nc']
+        num_classes = len(data['names'])
         classnames = data['names']
 
         if num_classes != len(data['names']):
