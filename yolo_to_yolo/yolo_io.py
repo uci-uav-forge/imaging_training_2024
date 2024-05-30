@@ -1,4 +1,5 @@
 from itertools import repeat
+import traceback
 from pathlib import Path
 from typing import Iterable, Generator
 import multiprocessing
@@ -8,10 +9,11 @@ from PIL import Image
 from tqdm import tqdm
 
 from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
+from yolo_to_yolo.generic_reader import GenericYoloReader
+from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, Task, ClassnameMap
 
 
-class YoloReader:
+class YoloReader(GenericYoloReader):
     """
     Reader for YOLO training data.
 
@@ -26,33 +28,8 @@ class YoloReader:
         prediction_task: PredictionTask,
         num_workers: int = int(multiprocessing.cpu_count()) - 1
     ) -> None:
-        self.prediction_task = prediction_task
+        super().__init__(yaml_path, prediction_task)
         self.num_workers = num_workers
-
-        self.yaml_path = yaml_path
-
-        self.descriptor = DatasetDescriptor.from_yaml(self.yaml_path)
-        self.descriptor.check_dirs_exist()
-
-    @property
-    def parent_dir(self) -> Path:
-        return self.descriptor.parent_dir
-
-    @property
-    def train_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.train_dirs
-
-    @property
-    def val_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.val_dirs
-
-    @property
-    def test_dirs(self) -> YoloSubsetDirs:
-        return self.descriptor.test_dirs
-
-    @property
-    def classes(self) -> tuple[str, ...]:
-        return self.descriptor.classes
 
     def read(
         self,
@@ -62,7 +39,7 @@ class YoloReader:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
+        pool = multiprocessing.Pool(self.num_workers)
         outputs: list[Iterable[YoloImageData]] = []
 
         for task in tasks:
@@ -163,7 +140,7 @@ class YoloWriter:
         self,
         data: Iterable[YoloImageData]
     ) -> None:
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
+        pool = multiprocessing.Pool(self.num_workers)
         pool.imap_unordered(self._worker_task, data, chunksize=8)
 
         pool.close()
@@ -176,19 +153,22 @@ class YoloWriter:
         """
         Worker task for writing image and labels files.
         """
-        img_id, task, image, labels = data
+        try:
+            img_id, task, image, labels = data
 
-        images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
-        img_path = images_dir / f'{img_id}.png'
-        labels_path = labels_dir / f'{img_id}.txt'
+            img_path = images_dir / f'{img_id}.png'
+            labels_path = labels_dir / f'{img_id}.txt'
 
-        Image.fromarray(image).save(img_path)
+            Image.fromarray(image).save(img_path)
 
-        with open(labels_path, 'w') as f:
-            for label in labels:
-                f.write(self._format_label(label))
-                f.write('\n')
+            with open(labels_path, 'w') as f:
+                for label in labels:
+                    f.write(self._format_label(label))
+                    f.write('\n')
+        except Exception:
+            traceback.print_exc()
 
     def _format_label(self, label: YoloLabel) -> str:
         class_id = self.classname_map.get_class_id(label.classname)
@@ -199,7 +179,10 @@ class YoloWriter:
         if isinstance(label.location, YoloOutline):
             return f"{class_id} {' '.join(f'{point.x} {point.y}' for point in label.location.points)}"
 
-        raise ValueError(f"Unknown location annotation type: {label.location}")
+        # need print because raising ValueError doesn't show message when using multiprocessing
+        err_msg = f"Unknown location annotation type: {label.location}"
+        print(err_msg)
+        raise ValueError(err_msg)
 
     def _write_dataset_yaml(self):
         yaml_path = self.out_dir / "data.yaml"

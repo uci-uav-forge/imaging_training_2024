@@ -2,7 +2,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from yolo_io_types import Task
+from .yolo_io_types import Task
 
 
 class Point(NamedTuple):
@@ -39,3 +39,4 @@ class YoloImageData(NamedTuple):
     task: Task
     image: np.ndarray
     labels: list[YoloLabel]
+

@@ -8,6 +8,7 @@ import yaml
 class PredictionTask(Enum):
     DETECTION = "detection"
     SEGMENTATION = "segmentation"
+    CLASSIFICATION = "classification"
 
 
 class Task(Enum):
@@ -202,4 +203,3 @@ class ClassnameMap:
         Whether the name is in the mapping.
         """
         return classname in self._classname_to_id
-
