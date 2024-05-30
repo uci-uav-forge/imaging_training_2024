@@ -4,6 +4,8 @@ from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloWriter, YoloReader, YoloLabel
 from yolo_to_yolo.yolo_io_types import PredictionTask
 from tqdm import tqdm
+
+
 if __name__ == "__main__":
     reader_1 = YoloReader(
         Path('/home/forge/uavf_2024/imaging_training_2024/godot_ds/2024-shapes-det.yaml'),
@@ -28,12 +30,6 @@ if __name__ == "__main__":
     )
     reader_1_class_dict = reader_1.classes
     reader_2_class_dict = reader_2.classes
-
-    def find_class_index(old_class_name, new_class_name, value):
-        class_name = old_class_name
-        for key, val in new_class_name.items():
-            if class_name == val:
-                return key
     
     changed_data_1 = []
     i = 0
@@ -44,7 +40,7 @@ if __name__ == "__main__":
             new_yolo_label_locations.append(YoloLabel(label.location, label.classname))
         changed_data_1.append((YoloImageData(
             "1_" + original_data.img_id, original_data.task, original_data.image, new_yolo_label_locations)))
-    # print([data.img_id for data in changed_data_1])
+
     changed_data_2 = (
     (YoloImageData(
         "2_" + original_data.img_id, original_data.task, original_data.image, original_data.labels
