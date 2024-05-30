@@ -146,14 +146,12 @@ class YoloWriter:
         self,
         out_dir: Path,
         prediction_task: PredictionTask,
-        classes: tuple[str, ...] ,
+        classes: Iterable[str],
         num_workers: int = int(multiprocessing.cpu_count()) - 1
     ) -> None:
         self.out_dir = out_dir
         self.prediction_task = prediction_task
         self.num_workers = num_workers
-        if type(classes) == dict:
-            classes = classes.values()
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
