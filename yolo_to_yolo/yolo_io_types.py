@@ -49,20 +49,25 @@ class DatasetDescriptor(NamedTuple):
                     raise NotADirectoryError(f"{sub_dir} is not a directory")
 
     def create_dirs(self):
-        if self.parent_dir.is_dir() and not any(self.parent_dir.iterdir()):
-            raise IsADirectoryError(f"{self.parent_dir} exists and is not empty")
+        # Check if parent_dir exists and if it is empty
+        if self.parent_dir.is_dir():
+            if any(self.parent_dir.iterdir()):  # This checks if the directory is not empty
+                raise IsADirectoryError(f"{self.parent_dir} exists and is not empty")
+        else:
+            self.parent_dir.mkdir(parents=True, exist_ok=True)  # Create parent_dir if it doesn't exist
 
+        # Create subdirectories for train, val, and test if they do not exist
         for task_dir in (self.train_dirs, self.val_dirs, self.test_dirs):
             for sub_dir in task_dir:
                 sub_dir.mkdir(parents=True, exist_ok=True)
 
     def get_image_and_labels_dirs(self, task: Task) -> YoloSubsetDirs:
-        match task:
-            case Task.TRAIN:
+        match task.value: 
+            case Task.TRAIN.value:
                 return self.train_dirs
-            case Task.VAL:
+            case Task.VAL.value:
                 return self.val_dirs
-            case Task.TEST:
+            case Task.TEST.value:
                 return self.test_dirs
             case _:
                 raise ValueError(f"Task {task} is invalid")
@@ -202,4 +207,3 @@ class ClassnameMap:
         Whether the name is in the mapping.
         """
         return classname in self._classname_to_id
-

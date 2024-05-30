@@ -117,17 +117,17 @@ class YoloReader:
         """
         split = label_line.strip().split()
 
-        if self.prediction_task == PredictionTask.DETECTION and len(split) != 5:
+        if self.prediction_task.value == PredictionTask.DETECTION.value and len(split) != 5:
             raise ValueError(f"Label line for detection should have 5 fields, got '{label_line}'")
 
-        if self.prediction_task == PredictionTask.SEGMENTATION and (len(split) - 1) % 2:
+        if self.prediction_task.value == PredictionTask.SEGMENTATION.value and (len(split) - 1) % 2:
             raise ValueError(f"Got odd number of points in label line: {label_line}")
 
         classname = self.classes[int(split[0])]
 
-        if self.prediction_task == PredictionTask.DETECTION:
+        if self.prediction_task.value == PredictionTask.DETECTION.value:
             location_data = YoloBbox(*map(float, split[1:]))
-        elif self.prediction_task == PredictionTask.SEGMENTATION:
+        elif self.prediction_task.value == PredictionTask.SEGMENTATION.value:
             location_data = YoloOutline([Point(float(x), float(y)) for x, y in batched(split[1:], 2)])
         else:
             raise NotImplementedError(

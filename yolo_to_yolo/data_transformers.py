@@ -66,10 +66,12 @@ class BBoxToCropTransformer(YoloDataTransformer):
     def __call__(self, input_data: YoloImageData) -> Iterable[YoloImageData]:
         img_height, img_width = input_data.image.shape[:2]
         
-        shape_labels = [label for label in input_data.labels if label.class_type == YoloClassType.SHAPE]
-        char_labels = [label for label in input_data.labels if label.class_type == YoloClassType.CHARACTER]
-        
+        shape_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.SHAPE.value]
+        char_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.CHARACTER.value]
+        color_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.COLOR.value]
+
         for shape_label in shape_labels:
+            
             if isinstance(shape_label.location, YoloBbox):
                 shape_bbox = shape_label.location
                 best_char_label = None
@@ -109,6 +111,20 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 # Create new labels for the cropped image
                 new_labels = [YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=shape_label.classname), YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=best_char_label.classname)]
 
+                # Find shape color label
+                for color_label in color_labels:
+                    if color_label.location == shape_label.location:
+                        shape_color_label = YoloLabel(YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=color_label.classname)
+                        new_labels.append(shape_color_label)
+                        break
+
+                # Find char color label
+                for color_label in color_labels:
+                    if color_label.location == best_char_label.location:
+                        char_color_label = YoloLabel(YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=color_label.classname)
+                        new_labels.append(char_color_label)
+                        break
+
                 # Make new image data to yield
                 new_img_data = YoloImageData(
                     img_id=f"{input_data.img_id}_{shape_label.classname}",
@@ -116,7 +132,6 @@ class BBoxToCropTransformer(YoloDataTransformer):
                     image=cropped_image,
                     labels=new_labels
                 )
-
                 yield new_img_data
 
     @staticmethod

@@ -29,7 +29,8 @@ class TargetAnnotation(NamedTuple):
 class YoloClassType(Enum):
     SHAPE = 1
     CHARACTER = 2
-    UNKNOWN = 3
+    COLOR = 3
+    UNKNOWN = 4
 
 class YoloLabel(NamedTuple):
     location: YoloOutline | YoloBbox
@@ -41,6 +42,8 @@ class YoloLabel(NamedTuple):
             return YoloClassType.SHAPE
         elif len(self.classname) == 1:
             return YoloClassType.CHARACTER
+        elif self.classname in ("red", "green", "blue", "orange", "purple", "white", "black", "brown"):
+            return YoloClassType.COLOR
         else:
             return YoloClassType.UNKNOWN
 
