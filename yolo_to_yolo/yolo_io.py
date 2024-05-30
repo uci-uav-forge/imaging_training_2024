@@ -167,8 +167,6 @@ class YoloWriter:
         pool.close()
         pool.join()
 
-        # list(map(self._worker_task, data))
-
         # Write it after everything's done as an indicator that the dataset is complete.
         self._write_dataset_yaml()
 
