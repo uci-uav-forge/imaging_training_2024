@@ -35,9 +35,9 @@ class GodotReader:
     def read(
         self,
     ) -> Generator[YoloImageData, None, None]:
-        num_imgs = os.listdir(self.dataset_folder_path / "images")
-        for i in range(len(num_imgs)):
-            progress = i / len(num_imgs)
+        num_imgs = len(os.listdir(self.dataset_folder_path / "images"))
+        for i in range(num_imgs):
+            progress = i / num_imgs
             img_path = self.dataset_folder_path / "images" / f"image{i}.png"
             masks_path = self.dataset_folder_path / "masks" / f"{i}"
             if progress < self.split_proportions[0]:
