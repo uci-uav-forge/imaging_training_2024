@@ -12,8 +12,8 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from issac_to_yolo.formatter_types import TileData, Bbox, Tile, ClassnameMap, ClassSelection, OutputLocations
-from yolo_config import TILE_SIZE, DEBUG, DATA_DIR
+from .formatter_types import TileData, Bbox, Tile, ClassnameMap, ClassSelection, OutputLocations
+from .yolo_config import TILE_SIZE, DEBUG, DATA_DIR
 
 
 class YOLOFormatter:
