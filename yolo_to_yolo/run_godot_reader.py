@@ -5,11 +5,11 @@ from yolo_to_yolo.data_types import YoloImageData
 from pathlib import Path
 from tqdm import tqdm
 
-# run me with `py -m yolo_to_yolo.run_godot_reader.py`
+# run me with py -m yolo_to_yolo.run_godot_reader
 if __name__ == "__main__":
-    dataset_id = 'small_100'
+    dataset_id = '4000'
     in_path = f'/datasets/godot_raw/godot_data_{dataset_id}'
-    out_path = f'/datasets/godot_processed/{dataset_id}'
+    out_path = f'/datasets/godot_processed/{dataset_id}_all_labels'
 
     reader = GodotReader(
         Path(in_path),
@@ -18,30 +18,37 @@ if __name__ == "__main__":
     shape_classnames = [
         "circle",
         "semicircle",
-        "quarter circle",
+        "quartercircle",
         "triangle",
         "rectangle",
         "pentagon",
         "star",
         "cross",
-        "person"
+        "person",
+        *"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "shape:white",
+        "shape:black",
+        "shape:red",
+        "shape:blue",
+        "shape:green",
+        "shape:purple",
+        "shape:brown",
+        "shape:orange",
+        "char:white",
+        "char:black",
+        "char:red",
+        "char:blue",
+        "char:green",
+        "char:purple",
+        "char:brown",
+        "char:orange"
     ]
-
-    only_shape_boxes = map(
-        lambda box: YoloImageData(
-            box.img_id,
-            box.task,
-            box.image,
-            [l for l in box.labels if l.classname in shape_classnames]
-        ),
-        reader.read()
-    )
 
     writer = YoloWriter(
         Path(out_path),
         PredictionTask.DETECTION,
-        shape_classnames,
+        shape_classnames
     )
 
-    writer.write(tqdm(only_shape_boxes))
+    writer.write(tqdm(reader.read()))
     
