@@ -38,14 +38,18 @@ class YoloLabel(NamedTuple):
 
     @property
     def class_type(self) -> YoloClassType:
-        if self.classname in ("circle", "semicircle", "quarter circle", "quartercircle", "quarter_circle", "triangle", "rectangle", "pentagon", "star", "cross"):
-            return YoloClassType.SHAPE
-        elif len(self.classname) == 1:
-            return YoloClassType.CHARACTER
-        elif self.classname in ("red", "green", "blue", "orange", "purple", "white", "black", "brown"):
-            return YoloClassType.COLOR
-        else:
+        lowercase = self.classname.lower()
+        if lowercase == "background":
             return YoloClassType.UNKNOWN
+        
+        if len(self.classname) == 1:
+            return YoloClassType.CHARACTER
+        
+        # Denotes the shape or character color
+        if lowercase.startswith("shape:") or lowercase.startswith("char:"):
+            return YoloClassType.COLOR
+        
+        return YoloClassType.SHAPE
 
 
 class YoloImageData(NamedTuple):
