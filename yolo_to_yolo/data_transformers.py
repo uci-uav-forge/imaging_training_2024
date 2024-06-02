@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Iterable
 
-from data_types import YoloImageData, YoloClassType, YoloLabel, YoloBbox, YoloOutline
+from .data_types import YoloImageData, YoloClassType, YoloLabel, YoloBbox, YoloOutline
 
 
 class YoloDataTransformer(ABC):

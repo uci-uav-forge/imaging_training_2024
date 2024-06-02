@@ -3,7 +3,7 @@ from enum import Enum
 
 import numpy as np
 
-from yolo_io_types import Task
+from .yolo_io_types import Task
 
 
 class Point(NamedTuple):
