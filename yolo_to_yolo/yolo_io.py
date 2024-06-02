@@ -122,8 +122,7 @@ class YoloReader:
 
         if self.prediction_task.value == PredictionTask.SEGMENTATION.value and (len(split) - 1) % 2:
             raise ValueError(f"Got odd number of points in label line: {label_line}")
-
-        classname = self.classes[int(split[0])]
+        classname = self.descriptor.classes[int(split[0])]
 
         if self.prediction_task.value == PredictionTask.DETECTION.value:
             location_data = YoloBbox(*map(float, split[1:]))
@@ -147,13 +146,12 @@ class YoloWriter:
         self,
         out_dir: Path,
         prediction_task: PredictionTask,
-        classes: tuple[str, ...],
+        classes: Iterable[str],
         num_workers: int = int(multiprocessing.cpu_count()) - 1
     ) -> None:
         self.out_dir = out_dir
         self.prediction_task = prediction_task
         self.num_workers = num_workers
-
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
