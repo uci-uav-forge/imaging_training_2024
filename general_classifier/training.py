@@ -149,6 +149,7 @@ class GeneralClassifierLightningModule(L.LightningModule):
         batch_size: int = 32,
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy
     ):
+        super().__init__()
         self.model = model
         
         self.train_dataset = GeneralClassifierDataset(yaml_path, Task.TRAIN)
