@@ -212,11 +212,11 @@ class GeneralClassifierLightningModule(L.LightningModule):
             shape_color_one_hot = F.one_hot(shape_color_indices, num_classes=len(Color))
         
         if any(label.character is None for label in labels):
-            character_one_hot = torch.zeros(len(Character))
+            character_one_hot = torch.zeros(Character.count())
         else:
             # label.character is not None for all labels, as verified above
             character_indices = torch.Tensor([label.character.value for label in labels if label.character is not None])
-            character_one_hot = F.one_hot(character_indices, num_classes=len(Character))
+            character_one_hot = F.one_hot(character_indices, num_classes=Character.count())
         
         if any(label.character_color is None for label in labels):
             character_color_one_hot = torch.zeros(len(Color))
@@ -242,7 +242,7 @@ class GeneralClassifierLightningModule(L.LightningModule):
 
 
 def train(
-    model: nn.Module = resnet18([len(Shape), len(Color), len(Character), len(Color)]),
+    model: nn.Module = resnet18([len(Shape), len(Color), Character.count(), len(Color)]),
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
     batch_size: int = BATCH_SIZE,
