@@ -1,8 +1,9 @@
 from typing import NamedTuple
+from enum import Enum
 
 import numpy as np
 
-from yolo_to_yolo.yolo_io_types import Task
+from .yolo_io_types import Task
 
 
 class Point(NamedTuple):
@@ -25,10 +26,30 @@ class TargetAnnotation(NamedTuple):
     location: YoloOutline | YoloBbox
     classname: str
 
+class YoloClassType(Enum):
+    SHAPE = 1
+    CHARACTER = 2
+    COLOR = 3
+    UNKNOWN = 4
 
 class YoloLabel(NamedTuple):
     location: YoloOutline | YoloBbox
     classname: str
+
+    @property
+    def class_type(self) -> YoloClassType:
+        lowercase = self.classname.lower()
+        if lowercase == "background":
+            return YoloClassType.UNKNOWN
+        
+        if len(self.classname) == 1:
+            return YoloClassType.CHARACTER
+        
+        # Denotes the shape or character color
+        if lowercase.startswith("shape:") or lowercase.startswith("char:"):
+            return YoloClassType.COLOR
+        
+        return YoloClassType.SHAPE
 
 
 class YoloImageData(NamedTuple):
