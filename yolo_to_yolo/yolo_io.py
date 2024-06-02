@@ -1,6 +1,6 @@
 from itertools import repeat
 from pathlib import Path
-from typing import Callable, Iterable, Generator
+from typing import Iterable, Generator
 import multiprocessing
 
 import numpy as np
