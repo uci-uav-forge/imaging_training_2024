@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-from yolo_to_yolo.data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
-from yolo_to_yolo.yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
+from .data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
+from .yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
 
 
 class YoloReader:
