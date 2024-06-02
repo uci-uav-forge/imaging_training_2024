@@ -1,10 +1,11 @@
-ultralytics==8.0
+ultralytics
 numpy
 opencv-python
 pandas
 torch
 Pillow==9.5
-albumentations==1.0.3
+albumentations
 pyyaml
 tqdm
 lightning
+tensorboard
