@@ -194,19 +194,24 @@ class YoloWriter:
         """
         Worker task for writing image and labels files.
         """
-        img_id, task, image, labels = data
+        try:
+            img_id, task, image, labels = data
 
-        images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
-        img_path = images_dir / f'{img_id}.png'
-        labels_path = labels_dir / f'{img_id}.txt'
+            img_path = images_dir / f'{img_id}.png'
+            labels_path = labels_dir / f'{img_id}.txt'
 
-        Image.fromarray(image).save(img_path)
+            Image.fromarray(image).save(img_path)
 
-        with open(labels_path, 'w') as f:
-            for label in labels:
-                f.write(self._format_label(label))
-                f.write('\n')
+            with open(labels_path, 'w') as f:
+                for label in labels:
+                    f.write(self._format_label(label))
+                    f.write('\n')
+                    
+        except Exception as e:
+            print(f"Error writing {img_id}: {e}")
+            
 
     def _format_label(self, label: YoloLabel) -> str:
         class_id = self.classname_map.get_class_id(label.classname)
