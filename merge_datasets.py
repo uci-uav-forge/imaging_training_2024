@@ -65,7 +65,7 @@ if __name__ == "__main__":
         Path('/home/minh/Desktop/uavf_2024/imaging_training_2024/data/isaac_yolo_7671_all/data.yaml'),
     ]
     
-    datasets = map(lambda path: YoloReader(path, PredictionTask.DETECTION), dataset_paths)
+    datasets = [YoloReader(path, PredictionTask.DETECTION) for path in dataset_paths]
     
     output_dir = Path('/home/minh/Desktop/uavf_2024/imaging_training_2024/data/isaac_godot_merged/')
     
