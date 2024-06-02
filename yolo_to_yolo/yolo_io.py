@@ -62,7 +62,7 @@ class YoloReader:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
+        pool = multiprocessing.Pool(self.num_workers)
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
@@ -162,7 +162,7 @@ class YoloWriter:
         self,
         data: Iterable[YoloImageData]
     ) -> None:
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
+        pool = multiprocessing.Pool(self.num_workers)
         pool.imap_unordered(self._worker_task, data, chunksize=8)
 
         pool.close()
