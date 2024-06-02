@@ -17,3 +17,6 @@ YOLO_*/
 # IDE
 .idea/
 .vscode/
+
+# virtualenv
+*venv/
