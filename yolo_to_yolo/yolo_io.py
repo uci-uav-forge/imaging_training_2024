@@ -20,14 +20,16 @@ class YoloReader:
         for yolo_image_data, task in reader:
             ...
     """
+    # There's alwyas going to be at least one reader and one writer,
+    # so using half the number of CPUs is a good default.
+    NUM_WORKERS = multiprocessing.cpu_count() // 2
+    
     def __init__(
         self,
         yaml_path: Path,
-        prediction_task: PredictionTask,
-        num_workers: int = int(multiprocessing.cpu_count()) - 1
+        prediction_task: PredictionTask
     ) -> None:
         self.prediction_task = prediction_task
-        self.num_workers = num_workers
 
         self.yaml_path = yaml_path
 
@@ -57,48 +59,61 @@ class YoloReader:
     def read(
         self,
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
-        img_file_pattern: str = "*.png"
+        img_file_pattern: str = "*.png",
+        multiprocess: bool = True
     ) -> Generator[YoloImageData, None, None]:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        outputs: list[Iterable[YoloImageData]] = []
+        if not multiprocess:
+            for task in tasks:
+                images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+                paths: Iterable[Path] = images_dir.glob(img_file_pattern)
+
+                for path in paths:
+                    result = self._worker_task((path, task))
+                    if result is not None:
+                        yield result
+            return
+    
+        pool = multiprocessing.Pool(self.NUM_WORKERS)
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
-            output: Iterable[YoloImageData] = pool.imap_unordered(
+            outputs: Iterable[YoloImageData | None] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
                 chunksize=8
             )
 
-            outputs.append(output)
-
+            for output in outputs:
+                if output is not None:
+                    yield output
+                    
         pool.close()
-
-        for output_iterable in outputs:
-            yield from output_iterable
-
         pool.join()
 
-    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData:
+    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData | None:
         """
         Worker task for reading image and labels files.
 
         Takes a tuple, so it can be used in `imap_unordered`.
         """
-        img_path, task = path_and_task
+        try:
+            img_path, task = path_and_task
 
-        image = np.array(Image.open(img_path))
+            image = np.array(Image.open(img_path))
 
-        img_id = self._get_id_from_filename(img_path)
-        _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
-        labels = list(self._get_labels_from_id(img_id, labels_dir))
+            img_id = self._get_id_from_filename(img_path)
+            _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            labels = list(self._get_labels_from_id(img_id, labels_dir))
 
-        return YoloImageData(img_id, task, image, labels)
+            return YoloImageData(img_id, task, image, labels)
+        
+        except Exception as e:
+            print(f"Error reading {img_path}: {e}")
 
     def _get_labels_from_id(self, img_id: str, labels_dir: Path) -> Iterable[YoloLabel]:
         labels_path = labels_dir / f'{img_id}.txt'
@@ -142,16 +157,17 @@ class YoloWriter:
 
     Preserves the ordering of the class map that is inputting and creates new indices for new ones.
     """
+    NUM_WORKERS = multiprocessing.cpu_count() // 2
+    
     def __init__(
         self,
         out_dir: Path,
         prediction_task: PredictionTask,
-        classes: Iterable[str],
-        num_workers: int = int(multiprocessing.cpu_count()) - 1
+        classes: Iterable[str]
     ) -> None:
         self.out_dir = out_dir
         self.prediction_task = prediction_task
-        self.num_workers = num_workers
+
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
@@ -159,14 +175,18 @@ class YoloWriter:
 
     def write(
         self,
-        data: Iterable[YoloImageData]
+        data: Iterable[YoloImageData],
+        multiprocess: bool = True
     ) -> None:
-        pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        pool.imap_unordered(self._worker_task, data, chunksize=8)
-
-        pool.close()
-        pool.join()
-
+        if multiprocess:
+            pool = multiprocessing.Pool(self.NUM_WORKERS)
+            pool.imap_unordered(self._worker_task, data, chunksize=8)
+            pool.close()
+            pool.join()
+        else:
+            for datum in data:
+                self._worker_task(datum)
+                
         # Write it after everything's done as an indicator that the dataset is complete.
         self._write_dataset_yaml()
 
@@ -174,19 +194,24 @@ class YoloWriter:
         """
         Worker task for writing image and labels files.
         """
-        img_id, task, image, labels = data
+        try:
+            img_id, task, image, labels = data
 
-        images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
-        img_path = images_dir / f'{img_id}.png'
-        labels_path = labels_dir / f'{img_id}.txt'
+            img_path = images_dir / f'{img_id}.png'
+            labels_path = labels_dir / f'{img_id}.txt'
 
-        Image.fromarray(image).save(img_path)
+            Image.fromarray(image).save(img_path)
 
-        with open(labels_path, 'w') as f:
-            for label in labels:
-                f.write(self._format_label(label))
-                f.write('\n')
+            with open(labels_path, 'w') as f:
+                for label in labels:
+                    f.write(self._format_label(label))
+                    f.write('\n')
+                    
+        except Exception as e:
+            print(f"Error writing {img_id}: {e}")
+            
 
     def _format_label(self, label: YoloLabel) -> str:
         class_id = self.classname_map.get_class_id(label.classname)
