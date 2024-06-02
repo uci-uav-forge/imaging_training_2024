@@ -63,27 +63,22 @@ class YoloReader:
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        outputs: list[Iterable[YoloImageData | None]] = []
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
-            output: Iterable[YoloImageData | None] = pool.imap_unordered(
+            outputs: Iterable[YoloImageData | None] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
                 chunksize=8
             )
 
-            outputs.append(output)
+            for output in outputs:
+                if output is not None:
+                    yield output
 
         pool.close()
-
-        for output_iterable in outputs:
-            for output_item in output_iterable:
-                if output_item is not None:
-                    yield output_item
-
         pool.join()
 
     def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData | None:
