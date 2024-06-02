@@ -9,12 +9,12 @@ from tqdm import tqdm
 # Functions in this module are broken down so we can reuse them selectively.
 
 
-def merge_readers(readers: Iterable[YoloReader]) -> Iterable[YoloImageData]:
+def merge_readers(readers: Iterable[YoloReader], multiprocess: bool = True) -> Iterable[YoloImageData]:
     """
     Sequentially yield images from multiple readers, adding a prefix to `img_id`.
     """
     for prefix, reader in enumerate(readers):
-        for data in reader.read():
+        for data in reader.read(multiprocess=multiprocess):
             yield YoloImageData(
                 img_id=f"{prefix}_{data.img_id}",
                 task=data.task,
@@ -38,7 +38,8 @@ def merge_reader_classes(readers: Iterable[YoloReader]) -> set[str]:
 def merge_datasets(
     readers: Iterable[YoloReader],
     output_dir: Path, 
-    prediction_task: PredictionTask = PredictionTask.DETECTION
+    prediction_task: PredictionTask = PredictionTask.DETECTION,
+    multiprocess: bool = True
 ) -> None:
     """
     Merge YOLO-formatted datasets from readers.
@@ -52,10 +53,11 @@ def merge_datasets(
     
     writer.write(
         tqdm(
-            merge_readers(readers),
+            merge_readers(readers, multiprocess=multiprocess),
             desc="Processing data",
             unit="images"
-        )
+        ),
+        multiprocess=multiprocess
     )
 
 
@@ -69,4 +71,4 @@ if __name__ == "__main__":
     
     output_dir = Path('/home/minh/Desktop/uavf_2024/imaging_training_2024/data/isaac_godot_merged/')
     
-    merge_datasets(datasets, output_dir)
+    merge_datasets(datasets, output_dir, multiprocess=True)

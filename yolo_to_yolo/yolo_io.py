@@ -1,6 +1,6 @@
 from itertools import repeat
 from pathlib import Path
-from typing import Iterable, Generator
+from typing import Callable, Iterable, Generator
 import multiprocessing
 
 import numpy as np
@@ -20,14 +20,16 @@ class YoloReader:
         for yolo_image_data, task in reader:
             ...
     """
+    # There's alwyas going to be at least one reader and one writer,
+    # so using half the number of CPUs is a good default.
+    NUM_WORKERS = multiprocessing.cpu_count() // 2
+    
     def __init__(
         self,
         yaml_path: Path,
-        prediction_task: PredictionTask,
-        num_workers: int = int(multiprocessing.cpu_count()) - 1
+        prediction_task: PredictionTask
     ) -> None:
         self.prediction_task = prediction_task
-        self.num_workers = num_workers
 
         self.yaml_path = yaml_path
 
@@ -57,12 +59,24 @@ class YoloReader:
     def read(
         self,
         tasks: tuple[Task, ...] = (Task.TRAIN, Task.VAL, Task.TEST),
-        img_file_pattern: str = "*.png"
+        img_file_pattern: str = "*.png",
+        multiprocess: bool = True
     ) -> Generator[YoloImageData, None, None]:
         """
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
-        pool = multiprocessing.Pool(self.num_workers)
+        if not multiprocess:
+            for task in tasks:
+                images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+                paths: Iterable[Path] = images_dir.glob(img_file_pattern)
+
+                for path in paths:
+                    result = self._worker_task((path, task))
+                    if result is not None:
+                        yield result
+            return
+    
+        pool = multiprocessing.Pool(self.NUM_WORKERS)
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
@@ -77,7 +91,7 @@ class YoloReader:
             for output in outputs:
                 if output is not None:
                     yield output
-
+                    
         pool.close()
         pool.join()
 
@@ -143,16 +157,17 @@ class YoloWriter:
 
     Preserves the ordering of the class map that is inputting and creates new indices for new ones.
     """
+    NUM_WORKERS = multiprocessing.cpu_count() // 2
+    
     def __init__(
         self,
         out_dir: Path,
         prediction_task: PredictionTask,
-        classes: Iterable[str],
-        num_workers: int = int(multiprocessing.cpu_count()) - 1
+        classes: Iterable[str]
     ) -> None:
         self.out_dir = out_dir
         self.prediction_task = prediction_task
-        self.num_workers = num_workers
+
         self.descriptor = DatasetDescriptor.from_parent_dir(self.out_dir, classes)
         self.descriptor.create_dirs()
 
@@ -160,14 +175,18 @@ class YoloWriter:
 
     def write(
         self,
-        data: Iterable[YoloImageData]
+        data: Iterable[YoloImageData],
+        multiprocess: bool = True
     ) -> None:
-        pool = multiprocessing.Pool(self.num_workers)
-        pool.imap_unordered(self._worker_task, data, chunksize=8)
-
-        pool.close()
-        pool.join()
-
+        if multiprocess:
+            pool = multiprocessing.Pool(self.NUM_WORKERS)
+            pool.imap_unordered(self._worker_task, data, chunksize=8)
+            pool.close()
+            pool.join()
+        else:
+            for datum in data:
+                self._worker_task(datum)
+                
         # Write it after everything's done as an indicator that the dataset is complete.
         self._write_dataset_yaml()
 
