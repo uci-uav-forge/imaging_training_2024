@@ -63,13 +63,13 @@ class YoloReader:
         Read the dataset with concurrency. Yields tuples of `(YoloImageData, Task)`.
         """
         pool: multiprocessing.Pool = multiprocessing.Pool(self.num_workers)
-        outputs: list[Iterable[YoloImageData]] = []
+        outputs: list[Iterable[YoloImageData | None]] = []
 
         for task in tasks:
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
             paths: Iterable[Path] = images_dir.glob(img_file_pattern)
 
-            output: Iterable[YoloImageData] = pool.imap_unordered(
+            output: Iterable[YoloImageData | None] = pool.imap_unordered(
                 self._worker_task,
                 zip(paths, repeat(task)),
                 chunksize=8
@@ -80,25 +80,31 @@ class YoloReader:
         pool.close()
 
         for output_iterable in outputs:
-            yield from output_iterable
+            for output_item in output_iterable:
+                if output_item is not None:
+                    yield output_item
 
         pool.join()
 
-    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData:
+    def _worker_task(self, path_and_task: tuple[Path, Task]) -> YoloImageData | None:
         """
         Worker task for reading image and labels files.
 
         Takes a tuple, so it can be used in `imap_unordered`.
         """
-        img_path, task = path_and_task
+        try:
+            img_path, task = path_and_task
 
-        image = np.array(Image.open(img_path))
+            image = np.array(Image.open(img_path))
 
-        img_id = self._get_id_from_filename(img_path)
-        _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
-        labels = list(self._get_labels_from_id(img_id, labels_dir))
+            img_id = self._get_id_from_filename(img_path)
+            _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
+            labels = list(self._get_labels_from_id(img_id, labels_dir))
 
-        return YoloImageData(img_id, task, image, labels)
+            return YoloImageData(img_id, task, image, labels)
+        
+        except Exception as e:
+            print(f"Error reading {img_path}: {e}")
 
     def _get_labels_from_id(self, img_id: str, labels_dir: Path) -> Iterable[YoloLabel]:
         labels_path = labels_dir / f'{img_id}.txt'
