@@ -6,9 +6,9 @@ from .yolo_data_pipeline import YoloDataPipeline
 
 def crop_targets(
     input_dir: Path,
-    output_dir: Path
+    output_dir: Path,
 ) -> None:
-    pipeline = YoloDataPipeline([BBoxToCropTransformer(min_padding=5)])
+    pipeline = YoloDataPipeline([BBoxToCropTransformer(min_padding=5, min_size=(64, 64))])
     pipeline.apply_to_dir(input_dir, output_dir)
 
 
@@ -25,12 +25,12 @@ def copy_dataset(
 if __name__ == '__main__':
     datasets_dir = Path("/home/minh/data")
     
-    # crop_targets(
-    #     Path(datasets_dir / "godot_4000_all_labels"),
-    #     Path(datasets_dir / "godot_4000_cropped")
-    # )
-
-    copy_dataset(
+    crop_targets(
         Path(datasets_dir / "godot_4000_all_labels"),
-        Path(datasets_dir / "godot_4000_copy")
+        Path(datasets_dir / "godot_4000_cropped_64")
     )
+
+    # copy_dataset(
+    #     Path(datasets_dir / "godot_4000_all_labels"),
+    #     Path(datasets_dir / "godot_4000_copy")
+    # )
