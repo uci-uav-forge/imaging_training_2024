@@ -3,10 +3,10 @@ from typing import Iterable
 
 from tqdm import tqdm
 
-from yolo_to_yolo.data_types import YoloImageData
-from yolo_to_yolo.data_transformers import ShapeTargetsOnly, YoloDataTransformer
-from yolo_to_yolo.yolo_io import YoloReader, YoloWriter
-from yolo_to_yolo.yolo_io_types import PredictionTask
+from .data_types import YoloImageData
+from .data_transformers import YoloDataTransformer
+from .yolo_io import YoloReader, YoloWriter
+from .yolo_io_types import PredictionTask
 
 
 class YoloDataPipeline:
@@ -54,9 +54,9 @@ class YoloDataPipeline:
         classes = reader.classes if self.classes is None else self.classes
         writer = YoloWriter(output_dir, self.prediction_task, classes)
 
-        data_in = reader.read()
+        data_in = reader.read(multiprocess=True)
         transformed = tqdm(self.apply(data_in))
-        writer.write(transformed)
+        writer.write(transformed, multiprocess=True)
 
 
 class DummyTransformer(YoloDataTransformer):
