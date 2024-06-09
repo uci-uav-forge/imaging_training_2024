@@ -9,9 +9,9 @@ import torch
 import lightning as L
 
 from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH
-from imaging_training_2024.yolo_to_yolo.data_types import YoloImageData
-from imaging_training_2024.yolo_to_yolo.yolo_io import YoloReader
-from imaging_training_2024.yolo_to_yolo.yolo_io_types import PredictionTask, Task
+from yolo_to_yolo.data_types import YoloImageData
+from yolo_to_yolo.yolo_io import YoloReader
+from yolo_to_yolo.yolo_io_types import PredictionTask, Task
 from uavf_2024.imaging.general_classifier.resnet import resnet18
 from uavf_2024.imaging.imaging_types import Character, Color, Shape
 
