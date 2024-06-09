@@ -8,3 +8,5 @@ BATCH_SIZE: int = 32
 EPOCHS: int = 100
 
 LOGS_PATH: str = "lightning_logs"
+
+DEBUG: bool = True

@@ -7,8 +7,10 @@ from torch.utils.data import Dataset, DataLoader
 from lightning.pytorch.loggers import TensorBoardLogger
 import torch
 import lightning as L
+import numpy as np
+import cv2
 
-from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH
+from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH, DEBUG
 from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloReader
 from yolo_to_yolo.yolo_io_types import PredictionTask, Task
@@ -35,7 +37,11 @@ class TrainingBatch(NamedTuple):
     labels: list[ClassificationLabel]
 
 
-resnet_output_t = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+class ResnetOutputTensors(NamedTuple):
+    shape: torch.Tensor
+    shape_color: torch.Tensor
+    character: torch.Tensor
+    character_color: torch.Tensor
 
 
 class GeneralClassifierDataset(Dataset):
@@ -44,11 +50,14 @@ class GeneralClassifierDataset(Dataset):
     
     Uses yolo_io.YoloReader to read the data.
     """
+    RESIZE_METHOD = cv2.INTER_CUBIC
+    
     def __init__(
         self, 
         yaml_path: Path, 
         task: Task, 
-        transformation: Callable[[YoloImageData], YoloImageData | Iterable[YoloImageData]] = lambda x: x
+        transformation: Callable[[YoloImageData], YoloImageData | Iterable[YoloImageData]] = lambda x: x,
+        output_size: tuple[int, int] | None = (224, 224),
     ):
         """
         Args:
@@ -67,6 +76,8 @@ class GeneralClassifierDataset(Dataset):
         self.image_paths = list(self.yolo_reader.get_image_paths(task))
         
         self.transformation = transformation
+        
+        self.output_size = output_size
 
     def __len__(self):
         return len(self.image_paths)
@@ -75,14 +86,60 @@ class GeneralClassifierDataset(Dataset):
         image_path = self.image_paths[idx]
         image_data = self.yolo_reader.read_single(self.task, image_path)
         
-        transformed_image_data = self.transformation(image_data)
+        transformed = self.transformation(image_data)
         
         # If the transformation returns an iterable, we only use the first element.
-        if not isinstance(transformed_image_data, YoloImageData):
-            transformed_image_data = next(iter(transformed_image_data))
+        if not isinstance(transformed, YoloImageData):
+            transformed = next(iter(transformed))
+            
+        if DEBUG:
+            self._print_missing_categories(transformed.img_id, (label.classname for label in transformed.labels))
+                
+        if self.output_size is None:
+            return transformed
         
-        return transformed_image_data
-
+        resized = self.resize(transformed.image)
+        return YoloImageData(
+            img_id=transformed.img_id,
+            task=transformed.task,
+            image=resized,
+            labels=transformed.labels
+        )
+        
+    @staticmethod
+    def _print_missing_categories(img_id: str, classnames: Iterable[str]):
+        has_shape = False
+        has_shape_color = False
+        has_character = False
+        has_character_color = False
+        
+        for name in classnames:
+            name = name.upper()
+            if Shape.from_str(name) is not None:
+                has_shape = True
+            elif Color.from_str(name.replace("SHAPE:", "")) is not None:
+                has_shape_color = True
+            elif Character.from_str(name) is not None:
+                has_character = True
+            elif Color.from_str(name.replace("CHAR:", "")) is not None:
+                has_character_color = True
+                
+        if not all([has_shape, has_shape_color, has_character, has_character_color]):
+            missing_categories = [
+                category for category, has in
+                zip(
+                    ["shape", "shape color", "character", "character color"], 
+                    [has_shape, has_shape_color, has_character, has_character_color]
+                ) if not has
+            ]
+            print(f"{img_id} is missing {', '.join(missing_categories)}.")
+    
+    def resize(self, image: np.ndarray):
+        if not self.output_size:
+            return image
+        
+        return cv2.resize(image, self.output_size)
+            
 
 class GeneralClassifierDataloader(DataLoader):
     """
@@ -159,7 +216,7 @@ class GeneralClassifierLightningModule(L.LightningModule):
         self.batch_size = batch_size
         self.loss_function = loss_function
 
-    def forward(self, x: torch.Tensor) -> resnet_output_t:
+    def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
         return self.model(x)
 
     def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
@@ -191,41 +248,53 @@ class GeneralClassifierLightningModule(L.LightningModule):
                 loss_value.backward()
         
     @staticmethod
-    def _labels_to_y(labels: list[ClassificationLabel]) -> resnet_output_t:
+    def _labels_to_y(labels: list[ClassificationLabel]) -> ResnetOutputTensors:
         """
         Creates a list of four one-hot-encoded tensors from a list of ClassificationLabels.
         
-        If an annotation category is None for any label, the corresponding tensor will be all zeros.
+        If an annotation category is None for any label, the corresponding tensor will be all -1.
         """
-        if any(label.shape is None for label in labels):
-            shape_one_hot = torch.zeros(len(Shape))
-        else:
-            # label.shape is not None for all labels, as verified above
-            shape_indices = torch.Tensor([label.shape.value for label in labels if label.shape is not None])
-            shape_one_hot = F.one_hot(shape_indices, num_classes=len(Shape))
+        exclude_shape = False
+        exclude_shape_color = False
+        exclude_character = False
+        exclude_character_color = False
         
-        if any(label.shape_color is None for label in labels):
-            shape_color_one_hot = torch.zeros(len(Color))
-        else:
-            # label.shape_color is not None for all labels, as verified above
-            shape_color_indices = torch.Tensor([label.shape_color.value for label in labels if label.shape_color is not None])
-            shape_color_one_hot = F.one_hot(shape_color_indices, num_classes=len(Color))
+        shape_indices: list[int] = []
+        shape_color_indices: list[int] = []
+        character_indices: list[int] = []
+        character_color_indices: list[int] = []
         
-        if any(label.character is None for label in labels):
-            character_one_hot = torch.zeros(Character.count())
-        else:
-            # label.character is not None for all labels, as verified above
-            character_indices = torch.Tensor([label.character.value for label in labels if label.character is not None])
-            character_one_hot = F.one_hot(character_indices, num_classes=Character.count())
+        for label in labels:
+            if not exclude_shape:
+                if label.shape is None:
+                    exclude_shape = True
+                else:
+                    shape_indices.append(label.shape.value)
+                    
+            if not exclude_shape_color:
+                if label.shape_color is None:
+                    exclude_shape_color = True
+                else:
+                    shape_color_indices.append(label.shape_color.value)
+                    
+            if not exclude_character:
+                if label.character is None:
+                    exclude_character = True
+                else:
+                    character_indices.append(label.character.index)
+                    
+            if not exclude_character_color:
+                if label.character_color is None:
+                    exclude_character_color = True
+                else:
+                    character_color_indices.append(label.character_color.value)
+                    
+        shape_y = F.one_hot(torch.tensor(shape_indices), len(Shape)) if not exclude_shape else torch.ones(1, len(Shape)) * -1
+        shape_color_y = F.one_hot(torch.tensor(shape_color_indices), len(Color)) if not exclude_shape_color else torch.ones(1, len(Color)) * -1
+        character_y = F.one_hot(torch.tensor(character_indices), Character.count()) if not exclude_character else torch.ones(1, Character.count()) * -1
+        character_color_y = F.one_hot(torch.tensor(character_color_indices), len(Color)) if not exclude_character_color else torch.ones(1, len(Color)) * -1
         
-        if any(label.character_color is None for label in labels):
-            character_color_one_hot = torch.zeros(len(Color))
-        else:
-            # label.character_color is not None for all labels, as verified above
-            character_color_indices = torch.Tensor([label.character_color.value for label in labels if label.character_color is not None])
-            character_color_one_hot = F.one_hot(character_color_indices, num_classes=len(Color))
-            
-        return (shape_one_hot, shape_color_one_hot, character_one_hot, character_color_one_hot)
+        return ResnetOutputTensors(shape_y, shape_color_y, character_y, character_color_y)
         
 
     def configure_optimizers(self):
