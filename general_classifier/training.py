@@ -73,7 +73,7 @@ class GeneralClassifierDataset(Dataset):
 
     def __getitem__(self, idx: int):
         image_path = self.image_paths[idx]
-        image_data = self.yolo_reader.read_single(image_path, self.task)
+        image_data = self.yolo_reader.read_single(self.task, image_path)
         
         transformed_image_data = self.transformation(image_data)
         
