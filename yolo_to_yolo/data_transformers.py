@@ -83,7 +83,7 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 shapes.append(label)
             elif Character.from_str(name) is not None:
                 characters.append(label)
-            elif Color.from_str(name.replace("SHAPE:", ""), name) or Color.from_str(name.replace("CHAR:", ""), name) is not None:
+            elif Color.from_str(name.replace("SHAPE:", "")) or Color.from_str(name.replace("CHAR:", "")) is not None:
                 colors.append(label)
         
         return shapes, characters, colors
