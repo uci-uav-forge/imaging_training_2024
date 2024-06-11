@@ -1,7 +1,11 @@
 from abc import abstractmethod, ABC
 from typing import Iterable
 
-from .data_types import YoloImageData, YoloClassType, YoloLabel, YoloBbox, YoloOutline
+from uavf_2024.imaging.imaging_types import Character, Color, Shape
+
+from .data_types import YoloImageData, YoloLabel, YoloBbox, YoloOutline
+
+import cv2
 
 
 class YoloDataTransformer(ABC):
@@ -63,14 +67,33 @@ class BBoxToCropTransformer(YoloDataTransformer):
         self.min_padding = min_padding
         self.min_char_overlap = min_char_overlap
 
+    @staticmethod
+    def _extract_label_categories(labels: Iterable[YoloLabel]) -> tuple[list[YoloLabel], list[YoloLabel], list[YoloLabel]]:
+        """
+        Returns three lists of labels: shapes, characters, and colors
+        """
+        shapes = []
+        characters = []
+        colors = []
+        
+        for label in labels:
+            name = label.classname.upper()
+            
+            if Shape.from_str(name) is not None:
+                shapes.append(label)
+            elif Character.from_str(name) is not None:
+                characters.append(label)
+            elif Color.from_str(name.replace("SHAPE:", ""), name) or Color.from_str(name.replace("CHAR:", ""), name) is not None:
+                colors.append(label)
+        
+        return shapes, characters, colors
+
     def __call__(self, input_data: YoloImageData) -> Iterable[YoloImageData]:
         img_height, img_width = input_data.image.shape[:2]
         
-        shape_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.SHAPE.value]
-        char_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.CHARACTER.value]
-        color_labels = [label for label in input_data.labels if label.class_type.value == YoloClassType.COLOR.value]
+        shape_labels, char_labels, color_labels = BBoxToCropTransformer._extract_label_categories(input_data.labels)
 
-        for shape_label in shape_labels:
+        for idx, shape_label in enumerate(shape_labels):
             
             if isinstance(shape_label.location, YoloBbox):
                 shape_bbox = shape_label.location
@@ -111,29 +134,72 @@ class BBoxToCropTransformer(YoloDataTransformer):
                 # Create new labels for the cropped image
                 new_labels = [YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=shape_label.classname), YoloLabel(location=YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=best_char_label.classname)]
 
-                # Find shape color label
+                shape_color_label = None
+                char_color_label = None
+
+                # Find color labels
                 for color_label in color_labels:
-                    if color_label.location == shape_label.location:
+                    if (not shape_color_label) and color_label.location == shape_label.location and color_label.classname.upper().startswith("SHAPE:"):
                         shape_color_label = YoloLabel(YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=color_label.classname)
                         new_labels.append(shape_color_label)
-                        break
-
-                # Find char color label
-                for color_label in color_labels:
-                    if color_label.location == best_char_label.location:
+                    elif (not char_color_label) and color_label.location == best_char_label.location and color_label.classname.upper().startswith("CHAR:"):
                         char_color_label = YoloLabel(YoloBbox(x=0.5, y=0.5, w=1.0, h=1.0), classname=color_label.classname)
                         new_labels.append(char_color_label)
-                        break
+                
+                if not shape_color_label:
+                    print(f"WARNING: No color label found for shape of class {shape_label.classname}, skipping!")
+                if not char_color_label:
+                    print(f"WARNING: No color label found for character of class {best_char_label.classname}, skipping!")
+                if not shape_color_label or not char_color_label:
+                    continue
 
+                # Skip if the image is missing any of the categories
+                if not __class__._has_all_categories(input_data.img_id, (shape_label.classname, best_char_label.classname, shape_color_label.classname, char_color_label.classname)):
+                    continue
+                
                 # Make new image data to yield
                 new_img_data = YoloImageData(
-                    img_id=f"{input_data.img_id}_{shape_label.classname}",
+                    img_id=f"{input_data.img_id}_{idx}_{shape_label.classname}",
                     task=input_data.task,
                     image=cropped_image,
                     labels=new_labels
                 )
+                # show the cropped image in window 
+                # cv2.imshow("cropped image", cropped_image)
+                # cv2.waitKey(0)
                 yield new_img_data
 
+    @staticmethod
+    def _has_all_categories(img_id: str, classnames: Iterable[str]) -> bool:
+        has_shape = False
+        has_shape_color = False
+        has_character = False
+        has_character_color = False
+        
+        for name in classnames:
+            name = name.upper()
+            if Shape.from_str(name) is not None:
+                has_shape = True
+            elif Color.from_str(name.replace("SHAPE:", "")) is not None:
+                has_shape_color = True
+            elif Character.from_str(name) is not None:
+                has_character = True
+            elif Color.from_str(name.replace("CHAR:", "")) is not None:
+                has_character_color = True
+                
+        if not all([has_shape, has_shape_color, has_character, has_character_color]):
+            missing_categories = [
+                category for category, has in
+                zip(
+                    ["shape", "shape color", "character", "character color"], 
+                    [has_shape, has_shape_color, has_character, has_character_color]
+                ) if not has
+            ]
+            print(f"{img_id} is missing {', '.join(missing_categories)}.")
+            return False
+        
+        return True
+    
     @staticmethod
     def _calculate_iou(bbox1: YoloBbox, bbox2: YoloBbox) -> float:
         """

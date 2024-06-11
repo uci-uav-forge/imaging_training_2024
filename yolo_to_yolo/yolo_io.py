@@ -194,8 +194,8 @@ class YoloWriter:
         """
         Worker task for writing image and labels files.
         """
+        img_id, task, image, labels = data
         try:
-            img_id, task, image, labels = data
 
             images_dir, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
 
