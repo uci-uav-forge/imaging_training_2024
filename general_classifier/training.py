@@ -146,8 +146,20 @@ class GeneralClassifierDataloader(DataLoader):
     Lightweight specification of a DataLoader for the general classifier, overriding the collate_fn
     to take a list of YoloImageData objects and return a TrainingBatch object.
     """
-    def __init__(self, dataset: GeneralClassifierDataset, batch_size: int = 32, shuffle: bool = True):
-        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=GeneralClassifierDataloader.collate)
+    def __init__(
+        self, 
+        dataset: GeneralClassifierDataset, 
+        batch_size: int = 32, 
+        num_workers: int = 2, 
+        shuffle: bool = True
+    ):
+        super().__init__(
+            dataset, 
+            batch_size=batch_size, 
+            shuffle=shuffle,
+            num_workers=num_workers,
+            collate_fn=GeneralClassifierDataloader.collate
+        )
     
     @staticmethod
     def collate(batch: list[YoloImageData]) -> TrainingBatch:
@@ -160,7 +172,8 @@ class GeneralClassifierDataloader(DataLoader):
         Returns:
             A TrainingBatch object containing the images and labels.
         """
-        images = torch.stack([torch.Tensor(image.image) for image in batch])
+        # Stack the images and transpose them to CHW
+        images = torch.stack([torch.Tensor(image.image) for image in batch]).transpose(1, 3)
         labels = [
             __class__.names_to_classification_label(
                 label.classname for label in image.labels
@@ -204,7 +217,7 @@ class GeneralClassifierLightningModule(L.LightningModule):
         model: nn.Module,
         yaml_path: Path,
         batch_size: int = 32,
-        loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy
+        loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy,
     ):
         super().__init__()
         self.model = model
@@ -215,20 +228,27 @@ class GeneralClassifierLightningModule(L.LightningModule):
 
         self.batch_size = batch_size
         self.loss_function = loss_function
+        
+        print(f"Initialized GeneralClassifierLightningModule on device {self.device}.")
 
     def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
         return self.model(x)
-
-    def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
+    
+    @staticmethod
+    def _all_equals_value(tensor: torch.Tensor, value: float) -> bool:
+        return bool(torch.all(tensor == value).item())
+    
+    def step(self, batch: TrainingBatch, batch_idx: int | None = None):
         image, labels = batch
         
         shape_y, shape_color_y, character_y, character_color_y = self._labels_to_y(labels)
         
-        shape_pred, shape_color_pred, character_pred, character_color_pred = self.model(image)
+        shape_color_missing = __class__._all_equals_value(shape_y, -1)
+        character_missing = __class__._all_equals_value(character_y, -1)
+        character_color_missing = __class__._all_equals_value(character_color_y, -1)
         
-        shape_color_missing = not torch.count_nonzero(shape_y)
-        character_missing = not torch.count_nonzero(character_y)
-        character_color_missing = not torch.count_nonzero(character_color_y)
+        predictions: ResnetOutputTensors = self.model(image)
+        shape_pred, shape_color_pred, character_pred, character_color_pred = predictions
 
         shape_loss = self.loss_function(shape_pred, shape_y)
         shape_color_loss = self.loss_function(shape_color_pred, shape_color_y) if not shape_color_missing else None
@@ -236,6 +256,9 @@ class GeneralClassifierLightningModule(L.LightningModule):
         character_color_loss = self.loss_function(character_color_pred, character_color_y) if not character_color_missing else None
         
         return ClassificationLosses(shape_loss, shape_color_loss, character_loss, character_color_loss)
+
+    def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
+        return self.step(batch, batch_idx)
     
     def backward(self, losses: ClassificationLosses):
         """
@@ -246,6 +269,9 @@ class GeneralClassifierLightningModule(L.LightningModule):
         for loss_value in losses:
             if loss_value is not None:
                 loss_value.backward()
+                
+    def validation_step(self, batch: TrainingBatch, batch_idx: int | None = None):
+        return self.step(batch, batch_idx)
         
     @staticmethod
     def _labels_to_y(labels: list[ClassificationLabel]) -> ResnetOutputTensors:
@@ -253,6 +279,8 @@ class GeneralClassifierLightningModule(L.LightningModule):
         Creates a list of four one-hot-encoded tensors from a list of ClassificationLabels.
         
         If an annotation category is None for any label, the corresponding tensor will be all -1.
+        
+        TODO: Refactor this functionality to the Dataset.
         """
         exclude_shape = False
         exclude_shape_color = False
@@ -288,26 +316,33 @@ class GeneralClassifierLightningModule(L.LightningModule):
                     exclude_character_color = True
                 else:
                     character_color_indices.append(label.character_color.value)
-                    
-        shape_y = F.one_hot(torch.tensor(shape_indices), len(Shape)) if not exclude_shape else torch.ones(1, len(Shape)) * -1
-        shape_color_y = F.one_hot(torch.tensor(shape_color_indices), len(Color)) if not exclude_shape_color else torch.ones(1, len(Color)) * -1
-        character_y = F.one_hot(torch.tensor(character_indices), Character.count()) if not exclude_character else torch.ones(1, Character.count()) * -1
-        character_color_y = F.one_hot(torch.tensor(character_color_indices), len(Color)) if not exclude_character_color else torch.ones(1, len(Color)) * -1
+            
+        shape_y = F.one_hot(torch.tensor(shape_indices), len(Shape)).to(torch.float16) if not exclude_shape else torch.ones(len(labels), len(Shape)) * -1
+        shape_color_y = F.one_hot(torch.tensor(shape_color_indices), len(Color)).to(torch.float16) if not exclude_shape_color else torch.ones(len(labels), len(Color)) * -1
+        character_y = F.one_hot(torch.tensor(character_indices), Character.count()).to(torch.float16) if not exclude_character else torch.ones(len(labels), Character.count()) * -1
+        character_color_y = F.one_hot(torch.tensor(character_color_indices), len(Color)).to(torch.float16) if not exclude_character_color else torch.ones(len(labels), len(Color)) * -1
         
-        return ResnetOutputTensors(shape_y, shape_color_y, character_y, character_color_y)
+        # Convert to float16 and move to CUDA device.
+        return ResnetOutputTensors(*map(
+            lambda tensor: tensor.to(torch.float16).to("cuda:0"), 
+            [shape_y, shape_color_y, character_y, character_color_y]
+        ))
         
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters(), lr=1e-3)
 
+    def _make_dataloader(self, dataset: GeneralClassifierDataset, num_workers: int = 2, shuffle: bool = True):
+        return GeneralClassifierDataloader(dataset, self.batch_size, shuffle=shuffle, num_workers=num_workers)
+    
     def train_dataloader(self):
-        return GeneralClassifierDataloader(self.train_dataset, self.batch_size)
+        return self._make_dataloader(self.train_dataset, 6)
 
     def val_dataloader(self):
-        return GeneralClassifierDataloader(self.val_dataset, self.batch_size)
+        return self._make_dataloader(self.val_dataset, 2, shuffle=False)
 
     def test_dataloader(self):
-        return GeneralClassifierDataloader(self.test_dataset, self.batch_size)
+        return self._make_dataloader(self.test_dataset, 2, shuffle=False)
 
 
 def train(
