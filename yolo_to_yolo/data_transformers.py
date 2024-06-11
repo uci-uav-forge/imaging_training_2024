@@ -5,8 +5,6 @@ from uavf_2024.imaging.imaging_types import Character, Color, Shape
 
 from .data_types import YoloImageData, YoloLabel, YoloBbox, YoloOutline
 
-import cv2
-
 
 class YoloDataTransformer(ABC):
     """
@@ -164,9 +162,6 @@ class BBoxToCropTransformer(YoloDataTransformer):
                     image=cropped_image,
                     labels=new_labels
                 )
-                # show the cropped image in window 
-                # cv2.imshow("cropped image", cropped_image)
-                # cv2.waitKey(0)
                 yield new_img_data
 
     @staticmethod
