@@ -6,10 +6,11 @@ from logging import warning
 from torch.nn import functional as F
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from lightning.pytorch.loggers import TensorBoardLogger
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score, MulticlassPrecisionRecallCurve, MulticlassStatScores
 import torch
-import lightning as L
+from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning.loggers import TensorBoardLogger
 import numpy as np
 import cv2
 
@@ -239,7 +240,7 @@ class GeneralClassifierDataloader(DataLoader):
 
 # Read: https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html#use-multiple-optimizers-like-gans
 ModelT = TypeVar("ModelT", bound=nn.Module)
-class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):    
+class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):    
     def __init__(
         self, 
         model: ModelT,
@@ -539,7 +540,8 @@ def train_resnet(
     print("Initalized logger. Logging to", logger.log_dir)
     print(f"Use `tensorboard --logdir={logger.log_dir}` to view logs.")
     
-    trainer = L.Trainer(precision='16', max_epochs=epochs, logger=logger, default_root_dir=logs_path)
+    early_stopper = EarlyStopping(monitor="val_loss", patience=5)
+    trainer = Trainer(precision='16', max_epochs=epochs, callbacks=[early_stopper], logger=logger, default_root_dir=logs_path)
     
     trainer.fit(module)
 
