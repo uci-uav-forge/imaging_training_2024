@@ -249,6 +249,17 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy,
     ):
+        """
+        PyTorch Lightning module to train any all-classes model.
+        
+        Args:
+            model: The model to train.
+            yaml_path: Path to the YAML file containing the dataset information.
+            make_optimizer: A function that takes the model and returns an optimizer.
+            batch_size: The batch size to use for training.
+            device: The device to train on.
+            loss_function: The loss function to use.
+        """
         super().__init__()
         self._device = device
         
