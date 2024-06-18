@@ -397,7 +397,7 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         
         # Aggregate each metric over all the categories
         for metric_name in metrics_dict.keys():
-            self.log(f"average {metric_name}", metrics_dict[metric_name].average(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log(f"average {metric_name}", metrics_dict[metric_name].average(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
         
     def _compute_metrics(
         self,
