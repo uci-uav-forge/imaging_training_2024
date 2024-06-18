@@ -540,7 +540,7 @@ def train_resnet(
     print("Initalized logger. Logging to", logger.log_dir)
     print(f"Use `tensorboard --logdir={logger.log_dir}` to view logs.")
     
-    early_stopper = EarlyStopping(monitor="val_loss", patience=5)
+    early_stopper = EarlyStopping(monitor="average f1", mode="max", patience=epochs//2)
     trainer = Trainer(precision='16', max_epochs=epochs, callbacks=[early_stopper], logger=logger, default_root_dir=logs_path)
     
     trainer.fit(module)
