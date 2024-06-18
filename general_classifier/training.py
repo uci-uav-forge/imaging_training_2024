@@ -1,6 +1,7 @@
 from itertools import repeat
+import os
 from pathlib import Path
-from typing import Callable, Generic, Iterable, NamedTuple, TypeVar
+from typing import Callable, Generic, Iterable, Literal, NamedTuple, TypeVar
 from logging import warning
 
 from torch.nn import functional as F
@@ -9,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score, MulticlassPrecisionRecallCurve, MulticlassStatScores
 import torch
 from pytorch_lightning.callbacks import EarlyStopping
-from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning import Callback, LightningModule, Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 import numpy as np
 import cv2
@@ -294,6 +295,11 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
 
     def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
         return self.model(x)
+
+    def save_weights(self, path: Path):
+        if not (path.suffix == ".pt" or path.suffix == ".pth"):
+            raise ValueError("Weights path must have a .pt or .pth extension")
+        torch.save(self.model.state_dict(), path)
     
     @staticmethod
     def _all_equals_value(tensor: torch.Tensor, value: float) -> bool:
@@ -523,25 +529,71 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         return self._make_dataloader(self.test_dataset, 2, shuffle=False)
 
 
+class SaveBestWeightsCallback(Callback):
+    def __init__(self, monitor="val_loss", mode: Literal["min","max"]="min"):        
+        self.monitor = monitor
+        self.mode = mode
+        self.best_metric: float = float("inf" if mode == "min" else "-inf")
+        
+    def on_validation_epoch_end(self, trainer: Trainer, pl_module: GeneralClassifierLightningModule):      
+        metric: float = float(torch.mean(trainer.callback_metrics[self.monitor]).item())
+        
+        log_dir = trainer.log_dir
+        if log_dir is None:
+            warning("Log directory is None. Skipping weight saving.")
+            return
+        log_dir = Path(log_dir)
+        
+        if self._is_improvement(metric):
+            self.best_metric = metric
+            save_path = log_dir / f"best_{trainer.current_epoch}.pt"
+            pl_module.save_weights(save_path)
+            
+            print(f"Saved best weights to {save_path}")
+            
+    def _is_improvement(self, metric: float) -> bool:
+        if self.mode == "min":
+            return metric < self.best_metric
+        else:
+            return metric > self.best_metric
+
 def train_resnet(
     model: ResNet = resnet18([len(Shape), len(Color), Character.count(), len(Color)]),
+    weights_path: Path | None = None,
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
     batch_size: int = BATCH_SIZE,
-    logs_path: Path = Path(LOGS_PATH)
+    logs_path: Path = Path(LOGS_PATH),
+    early_stop_metric: str = "average f1"
 ):
     """
     Extracted to a function for potential use in CLI.
     Generally, settings should be changed in `default_settings.py`.
     """
+    terminal_width = os.get_terminal_size()[0]
+    print("Training ResNet model".center(terminal_width, "-"))
+    
+    if weights_path is not None:
+        print("Loading weights from", weights_path)
+        model.load_state_dict(torch.load(weights_path))
+    
     module = GeneralClassifierLightningModule(model, data_yaml, ResnetOptimizers, batch_size, device=torch.device("cuda:0"))
     
     logger = TensorBoardLogger(logs_path, name="general_classifier")
     print("Initalized logger. Logging to", logger.log_dir)
     print(f"Use `tensorboard --logdir={logger.log_dir}` to view logs.")
     
-    early_stopper = EarlyStopping(monitor="average f1", mode="max", patience=epochs//2)
-    trainer = Trainer(precision='16', max_epochs=epochs, callbacks=[early_stopper], logger=logger, default_root_dir=logs_path)
+    # Callbacks
+    early_stopper = EarlyStopping(monitor=early_stop_metric, mode="max", patience=epochs//2)
+    best_weights_saver = SaveBestWeightsCallback(monitor=early_stop_metric, mode="max")
+    
+    trainer = Trainer(
+        precision='16-mixed', 
+        max_epochs=epochs, 
+        callbacks=[early_stopper, best_weights_saver], 
+        logger=logger, 
+        default_root_dir=logs_path
+    )
     
     trainer.fit(module)
 
