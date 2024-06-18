@@ -1,21 +1,26 @@
+from itertools import count, repeat
+from logging import warn
 from pathlib import Path
-from typing import Callable, Iterable, NamedTuple
+from typing import Any, Callable, Generic, Iterable, NamedTuple, TypeVar
 
 from torch.nn import functional as F
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from lightning.pytorch.loggers import TensorBoardLogger
+from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score, MulticlassPrecisionRecallCurve, MulticlassStatScores
 import torch
 import lightning as L
 import numpy as np
 import cv2
 
-from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH, DEBUG
 from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloReader
 from yolo_to_yolo.yolo_io_types import PredictionTask, Task
-from uavf_2024.imaging.general_classifier.resnet import resnet18
+from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18
 from uavf_2024.imaging.imaging_types import Character, Color, Shape
+
+from .optimizers import CustomOptimizer, ResnetOptimizers
+from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH, DEBUG
 
 
 class ClassificationLabel(NamedTuple):
@@ -23,13 +28,41 @@ class ClassificationLabel(NamedTuple):
     shape_color: Color | None = None
     character: Character | None = None
     character_color: Color | None = None
+
+
+class ClassificationMetrics(NamedTuple):
+    shape: float | None
+    shape_color: float | None
+    character: float | None
+    character_color: float | None
     
+    def average(self) -> float:
+        total: float = 0
+        count: int = 0
+        
+        for val in self:
+            if val is None:
+                continue
+            total += val
+            count += 1
+            
+        return total / count
+
 
 class ClassificationLosses(NamedTuple):
     shape: torch.Tensor
     shape_color: torch.Tensor | None
     character: torch.Tensor | None
     character_color: torch.Tensor | None
+    
+    def get_total(self) -> torch.Tensor | None:
+        loss = sum(loss for loss in self if loss is not None)
+        
+        if not isinstance(loss, torch.Tensor):
+            print("total_loss is not a tensor. This likely means all loss values were empty")
+            return None
+        
+        return loss
 
 
 class TrainingBatch(NamedTuple):
@@ -212,15 +245,18 @@ class GeneralClassifierDataloader(DataLoader):
 
 # TODO: Implement custom optimizer step
 # Read: https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html#use-multiple-optimizers-like-gans
-class GeneralClassifierLightningModule(L.LightningModule):
+ModelT = TypeVar("ModelT", bound=nn.Module)
+class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):    
     def __init__(
         self, 
-        model: nn.Module,
+        model: ModelT,
         yaml_path: Path,
-        batch_size: int = 32,
+        make_optimizer: Callable[[ModelT], CustomOptimizer],
+        batch_size: int = 64,
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy,
     ):
-        super().__init__()
+        super().__init__(device=device)
         self.model = model
         
         self.train_dataset = GeneralClassifierDataset(yaml_path, Task.TRAIN)
@@ -230,7 +266,25 @@ class GeneralClassifierLightningModule(L.LightningModule):
         self.batch_size = batch_size
         self.loss_function = loss_function
         
+        # Turn off automatic optimization to allow for custom back-propagation.
+        self.automatic_optimization = False
+        
+        self.optimizer = make_optimizer(model)
+        
+        # Metrics calculators
+        self.accuracy_metrics = self._make_classification_metrics(MulticlassAccuracy)
+        self.precision_metrics = self._make_classification_metrics(MulticlassPrecision)
+        self.recall_metrics = self._make_classification_metrics(MulticlassRecall)
+        self.f1_metrics = self._make_classification_metrics(MulticlassF1Score)
+        
         print(f"Initialized GeneralClassifierLightningModule on device {self.device}.")
+        
+    @staticmethod
+    def _make_classification_metrics(statistic: type[MulticlassStatScores]):
+        return [
+            statistic(num_classes) 
+            for num_classes in [len(Shape), len(Color), Character.count(), len(Color)]
+        ]
 
     def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
         return self.model(x)
@@ -241,47 +295,133 @@ class GeneralClassifierLightningModule(L.LightningModule):
     
     def step(self, batch: TrainingBatch, batch_idx: int | None = None):
         image, labels = batch
-        
-        shape_y, shape_color_y, character_y, character_color_y = self._labels_to_y(labels)
-        
-        shape_color_missing = __class__._all_equals_value(shape_y, -1)
-        character_missing = __class__._all_equals_value(character_y, -1)
-        character_color_missing = __class__._all_equals_value(character_color_y, -1)
-        
         predictions: ResnetOutputTensors = self.model(image)
-        shape_pred, shape_color_pred, character_pred, character_color_pred = predictions
-
-        shape_loss = self.loss_function(shape_pred, shape_y)
-        shape_color_loss = self.loss_function(shape_color_pred, shape_color_y) if not shape_color_missing else None
-        character_loss = self.loss_function(character_pred, character_y) if not character_missing else None
-        character_color_loss = self.loss_function(character_color_pred, character_color_y) if not character_color_missing else None
         
-        return ClassificationLosses(shape_loss, shape_color_loss, character_loss, character_color_loss)
-
-    def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
-        return self.step(batch, batch_idx)
+        return self._compute_losses(predictions, labels)
     
-    def backward(self, losses: ClassificationLosses):
+    def _apply_evaluation_conditional(
+        self,
+        preds: ResnetOutputTensors, 
+        labels: list[ClassificationLabel],
+        functions: Iterable[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]],
+    ) -> list[torch.Tensor | None]:
+        """
+        Applies conditional logic to determine whether to compute metrics based on the presence of labels.
+        
+        Returns a list of metrics
+        """
+        results: list[torch.Tensor | None] = []
+        
+        all_y = __class__._labels_to_indicies(labels)
+        
+        for func, pred, y in zip(functions, preds, all_y):
+            if y is None:
+                results.append(None)
+                continue
+            
+            y_tensor = torch.tensor(y, dtype=torch.int8)
+            result = func(pred, y_tensor)
+            results.append(result)
+
+        return results
+
+    def _compute_losses(
+        self, 
+        preds: ResnetOutputTensors, 
+        labels: list[ClassificationLabel], 
+    ) -> ClassificationLosses:
+        results: list[torch.Tensor | None] = []
+        
+        all_y = __class__._labels_to_y_distribution(labels)
+        
+        for pred, y in zip(preds, all_y):
+            is_missing = __class__._all_equals_value(pred, -1)
+            if is_missing:
+                results.append(None)
+            
+            result = self.loss_function(pred, y)
+            results.append(result)
+
+        return ClassificationLosses(*results) # type: ignore
+    
+    def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
+        self.optimizer.zero_grad()
+        losses = self.step(batch, batch_idx)
+        total_loss = self.backward(losses)
+        self.optimizer.step()
+        
+        if total_loss is not None:
+            self.log("train_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        
+        return total_loss
+    
+    def backward(self, losses: ClassificationLosses) -> torch.Tensor | None:
         """
         Custom back-propagation for multi-head loss conditional on present/missing labels.
         
         Losses not computed (for missing labels) must be None to be skipped.
         """
-        for loss_value in losses:
-            if loss_value is not None:
-                loss_value.backward()
+        total_loss = losses.get_total()
+        
+        if not isinstance(total_loss, torch.Tensor):
+            return None
+        
+        total_loss.backward()    
+        
+        return total_loss    
                 
     def validation_step(self, batch: TrainingBatch, batch_idx: int | None = None):
-        return self.step(batch, batch_idx)
+        losses = self.step(batch, batch_idx)
+        total_loss = losses.get_total()
         
-    @staticmethod
-    def _labels_to_y(labels: list[ClassificationLabel]) -> ResnetOutputTensors:
+        if total_loss is not None:
+            self.log("val_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            
+        metrics = self._compute_metrics(self.model(batch.images), batch.labels)
+        self._log_classification_metrics(metrics)
+        
+    def _log_classification_metrics(self, metrics_dict: dict[str, ClassificationMetrics]):
+        for metric_name, metrics in metrics_dict.items():
+            for category, value in zip(ClassificationMetrics._fields, metrics):
+                if value is not None:
+                    warn(f"{category} {metric_name} is None. This likely means the category is missing from the labels.")
+                    self.log(f"{category} {metric_name}", value, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        # Aggregate each metric over all the categories
+        for metric_name in metrics_dict.keys():
+            self.log(f"average {metric_name}", metrics_dict[metric_name].average(), on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        
+    def _compute_metrics(
+        self,
+        preds: ResnetOutputTensors,
+        labels: list[ClassificationLabel]
+    ) -> dict[str, ClassificationMetrics]:
         """
-        Creates a list of four one-hot-encoded tensors from a list of ClassificationLabels.
+        Given a batch of predictions and labels, computes the metrics for each category.
         
-        If an annotation category is None for any label, the corresponding tensor will be all -1.
+        Returns a dictionary of metrics.
+        """
+        accuracies = self._apply_evaluation_conditional(preds, labels, self.accuracy_metrics)
+        precisions = self._apply_evaluation_conditional(preds, labels, self.precision_metrics)
+        recalls = self._apply_evaluation_conditional(preds, labels, self.recall_metrics)
+        f1s = self._apply_evaluation_conditional(preds, labels, self.f1_metrics)
+        # precision_recalls = __class__._apply_evaluation_conditional(preds, labels, self.precision_recall_metrics)
         
-        TODO: Refactor this functionality to the Dataset.
+        return {
+            "accuracy": ClassificationMetrics(*(tensor.item() if tensor is not None else None for tensor in accuracies)),
+            "precision": ClassificationMetrics(*(tensor.item() if tensor is not None else None for tensor in precisions)),
+            "recall": ClassificationMetrics(*(tensor.item() if tensor is not None else None for tensor in recalls)),
+            "f1": ClassificationMetrics(*(tensor.item() if tensor is not None else None for tensor in f1s)),
+        }
+    
+    @staticmethod
+    def _labels_to_indicies(
+        labels: list[ClassificationLabel]
+    ) -> tuple[list[int] | None, list[int] | None, list[int] | None, list[int] | None]:
+        """
+        Converts a list of ClassificationLabels to a list of indices.
+        
+        If an annotation category is None for any label, that category's indices will be None.
         """
         exclude_shape = False
         exclude_shape_color = False
@@ -317,15 +457,33 @@ class GeneralClassifierLightningModule(L.LightningModule):
                     exclude_character_color = True
                 else:
                     character_color_indices.append(label.character_color.value)
+                    
+        return (
+            shape_indices if not exclude_shape else None,
+            shape_color_indices if not exclude_shape_color else None,
+            character_indices if not exclude_character else None,
+            character_color_indices if not exclude_character_color else None
+        )
+        
+    @staticmethod
+    def _labels_to_y_distribution(labels: list[ClassificationLabel]) -> ResnetOutputTensors:
+        """
+        Creates a list of four one-hot-encoded tensors from a list of ClassificationLabels.
+        
+        If an annotation category is None for any label, the corresponding tensor will be all -1.
+        
+        TODO: Refactor this functionality to the Dataset.
+        """
+        shape_indices, shape_color_indices, character_indices, character_color_indices = __class__._labels_to_indicies(labels)
             
-        shape_y = F.one_hot(torch.tensor(shape_indices), len(Shape)).to(torch.float16) if not exclude_shape else torch.ones(len(labels), len(Shape)) * -1
-        shape_color_y = F.one_hot(torch.tensor(shape_color_indices), len(Color)).to(torch.float16) if not exclude_shape_color else torch.ones(len(labels), len(Color)) * -1
-        character_y = F.one_hot(torch.tensor(character_indices), Character.count()).to(torch.float16) if not exclude_character else torch.ones(len(labels), Character.count()) * -1
-        character_color_y = F.one_hot(torch.tensor(character_color_indices), len(Color)).to(torch.float16) if not exclude_character_color else torch.ones(len(labels), len(Color)) * -1
+        shape_y = F.one_hot(torch.tensor(shape_indices), len(Shape)).to(torch.float16) if shape_indices is not None else torch.ones(len(labels), len(Shape)) * -1
+        shape_color_y = F.one_hot(torch.tensor(shape_color_indices), len(Color)).to(torch.float16) if shape_color_indices else torch.ones(len(labels), len(Color)) * -1
+        character_y = F.one_hot(torch.tensor(character_indices), Character.count()).to(torch.float16) if character_indices is not None else torch.ones(len(labels), Character.count()) * -1
+        character_color_y = F.one_hot(torch.tensor(character_color_indices), len(Color)).to(torch.float16) if character_color_indices is not None else torch.ones(len(labels), len(Color)) * -1
         
         # Convert to float16 and move to CUDA device.
         return ResnetOutputTensors(*map(
-            lambda tensor: tensor.to(torch.float16).to("cuda:0"), 
+            lambda tensor: tensor.to(torch.float16), 
             [shape_y, shape_color_y, character_y, character_color_y]
         ))
         
@@ -346,8 +504,8 @@ class GeneralClassifierLightningModule(L.LightningModule):
         return self._make_dataloader(self.test_dataset, 2, shuffle=False)
 
 
-def train(
-    model: nn.Module = resnet18([len(Shape), len(Color), Character.count(), len(Color)]),
+def train_resnet(
+    model: ResNet = resnet18([len(Shape), len(Color), Character.count(), len(Color)]),
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
     batch_size: int = BATCH_SIZE,
@@ -357,13 +515,14 @@ def train(
     Extracted to a function for potential use in CLI.
     Generally, settings should be changed in `default_settings.py`.
     """
-    module = GeneralClassifierLightningModule(model, data_yaml, batch_size)
+    module = GeneralClassifierLightningModule(model, data_yaml, ResnetOptimizers, batch_size, device=torch.device("cuda:0"))
     
     logger = TensorBoardLogger(logs_path, name="general_classifier")
-    trainer = L.Trainer(max_epochs=epochs, logger=logger)
+    trainer = L.Trainer(max_epochs=epochs, logger=logger, default_root_dir=logs_path)
     
     trainer.fit(module)
 
 
 if __name__ == '__main__':
-    train()
+    torch.set_float32_matmul_precision("medium")
+    train_resnet()

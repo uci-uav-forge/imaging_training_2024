@@ -1,1 +1,1 @@
-from .training import train, GeneralClassifierLightningModule
+from .training import train_resnet, GeneralClassifierLightningModule
