@@ -237,7 +237,6 @@ class GeneralClassifierDataloader(DataLoader):
         
         return ClassificationLabel(shape, shape_color, character, character_color)
 
-# TODO: Implement custom optimizer step
 # Read: https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html#use-multiple-optimizers-like-gans
 ModelT = TypeVar("ModelT", bound=nn.Module)
 class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):    
