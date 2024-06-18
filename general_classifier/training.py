@@ -381,10 +381,11 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         total_loss = losses.get_total()
         
         if total_loss is not None:
-            self.log("val_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log("val_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
             
         metrics = self._compute_metrics(self.model(batch.images), batch.labels)
         self._log_classification_metrics(metrics)
+        return total_loss
         
     def _log_classification_metrics(self, metrics_dict: dict[str, ClassificationMetrics]):
         for metric_name, metrics in metrics_dict.items():
