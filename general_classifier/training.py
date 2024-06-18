@@ -1,7 +1,7 @@
-from itertools import count, repeat
-from logging import warn
+from itertools import repeat
 from pathlib import Path
-from typing import Any, Callable, Generic, Iterable, NamedTuple, TypeVar
+from typing import Callable, Generic, Iterable, NamedTuple, TypeVar
+from logging import warning
 
 from torch.nn import functional as F
 import torch.nn as nn
@@ -68,6 +68,7 @@ class ClassificationLosses(NamedTuple):
 class TrainingBatch(NamedTuple):
     images: torch.Tensor
     labels: list[ClassificationLabel]
+    ids: list[str] | None = None # IDs of all of the images in for debugging purposes
 
 
 class ResnetOutputTensors(NamedTuple):
@@ -124,9 +125,6 @@ class GeneralClassifierDataset(Dataset):
         # If the transformation returns an iterable, we only use the first element.
         if not isinstance(transformed, YoloImageData):
             transformed = next(iter(transformed))
-            
-        if DEBUG:
-            self._print_missing_categories(transformed.img_id, (label.classname for label in transformed.labels))
                 
         if self.output_size is None:
             return transformed
@@ -138,34 +136,6 @@ class GeneralClassifierDataset(Dataset):
             image=resized,
             labels=transformed.labels
         )
-        
-    @staticmethod
-    def _print_missing_categories(img_id: str, classnames: Iterable[str]):
-        has_shape = False
-        has_shape_color = False
-        has_character = False
-        has_character_color = False
-        
-        for name in classnames:
-            name = name.upper()
-            if Shape.from_str(name) is not None:
-                has_shape = True
-            elif Color.from_str(name.replace("SHAPE:", "")) is not None:
-                has_shape_color = True
-            elif Character.from_str(name) is not None:
-                has_character = True
-            elif Color.from_str(name.replace("CHAR:", "")) is not None:
-                has_character_color = True
-                
-        if not all([has_shape, has_shape_color, has_character, has_character_color]):
-            missing_categories = [
-                category for category, has in
-                zip(
-                    ["shape", "shape color", "character", "character color"], 
-                    [has_shape, has_shape_color, has_character, has_character_color]
-                ) if not has
-            ]
-            print(f"{img_id} is missing {', '.join(missing_categories)}.")
     
     def resize(self, image: np.ndarray):
         if not self.output_size:
@@ -213,7 +183,24 @@ class GeneralClassifierDataloader(DataLoader):
             ) for image in batch
         ]
         
-        return TrainingBatch(images, labels)
+        ids = None
+        
+        if DEBUG:
+            ids = [image.img_id for image in batch]
+            for img_id, label in zip(ids, labels):
+                __class__.warn_missing_labels(label, img_id)
+        
+        return TrainingBatch(images, labels, ids)
+    
+    @staticmethod
+    def warn_missing_labels(label: ClassificationLabel, img_id: str) -> None:
+        """
+        Warns if any of the labels are missing.
+        """
+        for field, val in zip(label._fields, label):
+            if val is None:
+                warning(f"Missing {field} for image {img_id}.")     
+        
 
     @staticmethod
     def names_to_classification_label(classnames: Iterable[str]) -> ClassificationLabel:
@@ -234,12 +221,19 @@ class GeneralClassifierDataloader(DataLoader):
         for classname in map(str.upper, classnames):
             if classname in Shape.__members__:
                 shape = Shape[classname]
-            elif classname in Color.__members__:
-                shape_color = Color[classname]
+                continue
             elif classname in Character.__members__:
                 character = Character(classname)
-            elif classname in Color.__members__:
-                character_color = Color[classname]
+                continue
+            
+            if Color.is_shape_color(classname):
+                shape_color = Color.from_str(classname)
+                continue
+            elif Color.is_char_color(classname):
+                character_color = Color.from_str(classname)
+                continue
+            
+            warning(f"Unknown classname: {classname}.")
         
         return ClassificationLabel(shape, shape_color, character, character_color)
 
@@ -256,8 +250,10 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy,
     ):
-        super().__init__(device=device)
-        self.model = model
+        super().__init__()
+        self._device = device
+        
+        self.model = model.to(device)
         
         self.train_dataset = GeneralClassifierDataset(yaml_path, Task.TRAIN)
         self.val_dataset = GeneralClassifierDataset(yaml_path, Task.VAL)
@@ -279,10 +275,9 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         
         print(f"Initialized GeneralClassifierLightningModule on device {self.device}.")
         
-    @staticmethod
-    def _make_classification_metrics(statistic: type[MulticlassStatScores]):
+    def _make_classification_metrics(self, statistic: type[MulticlassStatScores]):
         return [
-            statistic(num_classes) 
+            statistic(num_classes).to(self.device)
             for num_classes in [len(Shape), len(Color), Character.count(), len(Color)]
         ]
 
@@ -294,10 +289,17 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         return bool(torch.all(tensor == value).item())
     
     def step(self, batch: TrainingBatch, batch_idx: int | None = None):
-        image, labels = batch
-        predictions: ResnetOutputTensors = self.model(image)
+        if DEBUG:
+            ids = repeat("") if batch.ids is None else batch.ids
+            for id, labels in zip(ids, batch.labels):
+                for label, field in zip(labels, ClassificationLabel._fields):
+                    if label is None:
+                        warning(f"Missing {field} for image {id}.")
         
-        return self._compute_losses(predictions, labels)
+        images, labels, ids = batch
+        predictions: ResnetOutputTensors = self.model(images)
+        
+        return self._compute_losses(predictions, labels, ids)
     
     def _apply_evaluation_conditional(
         self,
@@ -319,7 +321,7 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
                 results.append(None)
                 continue
             
-            y_tensor = torch.tensor(y, dtype=torch.int8)
+            y_tensor = torch.tensor(y, dtype=torch.int8).to(self.device)
             result = func(pred, y_tensor)
             results.append(result)
 
@@ -329,15 +331,19 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         self, 
         preds: ResnetOutputTensors, 
         labels: list[ClassificationLabel], 
+        ids: list[str] | None = None # Image IDs for debugging purposes
     ) -> ClassificationLosses:
         results: list[torch.Tensor | None] = []
         
-        all_y = __class__._labels_to_y_distribution(labels)
+        all_y = map(lambda t: t.to(self.device), __class__._labels_to_y_distribution(labels))
         
-        for pred, y in zip(preds, all_y):
-            is_missing = __class__._all_equals_value(pred, -1)
+        for field_name, pred, y in zip(ClassificationLosses._fields, preds, all_y):
+            is_missing = __class__._all_equals_value(y, -1)
             if is_missing:
+                if DEBUG:
+                    warning(f"Skipping loss calculation for missing {field_name}{f' ({ids})' if ids is not None else ''}.")
                 results.append(None)
+                continue
             
             result = self.loss_function(pred, y)
             results.append(result)
@@ -384,8 +390,9 @@ class GeneralClassifierLightningModule(L.LightningModule, Generic[ModelT]):
         for metric_name, metrics in metrics_dict.items():
             for category, value in zip(ClassificationMetrics._fields, metrics):
                 if value is not None:
-                    warn(f"{category} {metric_name} is None. This likely means the category is missing from the labels.")
                     self.log(f"{category} {metric_name}", value, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+                else:
+                    warning(f"{category} {metric_name} is None. This likely means the category is missing from the labels.")
         
         # Aggregate each metric over all the categories
         for metric_name in metrics_dict.keys():
@@ -518,11 +525,28 @@ def train_resnet(
     module = GeneralClassifierLightningModule(model, data_yaml, ResnetOptimizers, batch_size, device=torch.device("cuda:0"))
     
     logger = TensorBoardLogger(logs_path, name="general_classifier")
+    print("Initalized logger. Logging to", logger.log_dir)
+    print(f"Use `tensorboard --logdir={logger.log_dir}` to view logs.")
+    
     trainer = L.Trainer(max_epochs=epochs, logger=logger, default_root_dir=logs_path)
     
     trainer.fit(module)
 
 
+def test_dataset():
+    dataset = GeneralClassifierDataset(Path(DATA_YAML), Task.VAL)
+    dataloader = GeneralClassifierDataloader(dataset, 1, shuffle=False)
+    
+    for data in dataset:
+        print("Read", data.img_id)
+        if data.img_id == "2950_0_circle":
+            label = GeneralClassifierDataloader.names_to_classification_label(label.classname for label in data.labels)
+            print(label)
+            break
+        
+
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("medium")
     train_resnet()
+
+    # test_dataset()
