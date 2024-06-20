@@ -8,10 +8,15 @@ from torch.nn import functional as F
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score, MulticlassPrecisionRecallCurve, MulticlassStatScores
+from torchvision.transforms.functional import to_pil_image
 import torch
+import torchvision
+
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning import Callback, LightningModule, Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
+
+import PIL.Image
 import numpy as np
 import cv2
 
@@ -30,6 +35,14 @@ class ClassificationLabel(NamedTuple):
     shape_color: Color | None = None
     character: Character | None = None
     character_color: Color | None = None
+    
+    def __str__(self) -> str:
+        shape = Shape._member_names_[self.shape.value] if self.shape is not None else "No Shape"
+        shape_color = Color._member_names_[self.shape_color.value] if self.shape_color is not None else "No Shape Color"
+        character = str(self.character) if self.character is not None else "No Character"
+        character_color = Color._member_names_[self.character_color.value] if self.character_color is not None else "No character Color"
+        
+        return " | ".join([shape, shape_color, character, character_color])
 
 
 class ClassificationMetrics(NamedTuple):
@@ -78,6 +91,17 @@ class ResnetOutputTensors(NamedTuple):
     shape_color: torch.Tensor
     character: torch.Tensor
     character_color: torch.Tensor
+    
+    def iter_labels(self) -> Iterable[ClassificationLabel]:
+        """
+        Yields ClassificationLabels from the output tensors.
+        """
+        for shape, shape_color, character, character_color in zip(*self):
+            shape = Shape(int(shape.argmax().item()))
+            shape_color = Color(int(shape_color.argmax().item()))
+            character = Character.from_index(int(character.argmax().item()))
+            character_color = Color(int(character_color.argmax().item()))
+            yield ClassificationLabel(shape, shape_color, character, character_color)
 
 
 class GeneralClassifierDataset(Dataset):
@@ -293,9 +317,6 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
             for num_classes in [len(Shape), len(Color), Character.count(), len(Color)]
         ]
 
-    def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
-        return self.model(x)
-
     def save_weights(self, path: Path):
         if not (path.suffix == ".pt" or path.suffix == ".pth"):
             raise ValueError("Weights path must have a .pt or .pth extension")
@@ -305,7 +326,13 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
     def _all_equals_value(tensor: torch.Tensor, value: float) -> bool:
         return bool(torch.all(tensor == value).item())
     
+    def forward(self, x: torch.Tensor) -> ResnetOutputTensors:
+        return ResnetOutputTensors(*self.model(x))
+
     def step(self, batch: TrainingBatch, batch_idx: int | None = None):
+        """
+        Performs a forward pass, computes losses, and returns the losses and predictions.
+        """
         if DEBUG:
             ids = repeat("") if batch.ids is None else batch.ids
             for id, labels in zip(ids, batch.labels):
@@ -314,9 +341,9 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
                         warning(f"Missing {field} for image {id}.")
         
         images, labels, ids = batch
-        predictions: ResnetOutputTensors = self.model(images)
+        predictions: ResnetOutputTensors = self.forward(images)
         
-        return self._compute_losses(predictions, labels, ids)
+        return self._compute_losses(predictions, labels, ids), predictions
     
     def _apply_evaluation_conditional(
         self,
@@ -369,7 +396,7 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
     
     def training_step(self, batch: TrainingBatch, batch_idx: int | None = None):
         self.optimizer.zero_grad()
-        losses = self.step(batch, batch_idx)
+        losses, _ = self.step(batch, batch_idx)
         total_loss = self.backward(losses)
         self.optimizer.step()
         
@@ -394,14 +421,17 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         return total_loss    
                 
     def validation_step(self, batch: TrainingBatch, batch_idx: int | None = None):
-        losses = self.step(batch, batch_idx)
+        losses, predictions = self.step(batch, batch_idx)
         total_loss = losses.get_total()
+        
+        self._save_samples(batch, predictions)
         
         if total_loss is not None:
             self.log("val_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
             
         metrics = self._compute_metrics(self.model(batch.images), batch.labels)
         self._log_classification_metrics(metrics)
+        
         return total_loss
         
     def _log_classification_metrics(self, metrics_dict: dict[str, ClassificationMetrics]):
@@ -415,7 +445,50 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         # Aggregate each metric over all the categories
         for metric_name in metrics_dict.keys():
             self.log(f"average {metric_name}", metrics_dict[metric_name].average(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
+    
+    def _save_samples(self, batch: TrainingBatch, preds: ResnetOutputTensors, grid_shape: tuple[int, int] = (4, 4)):
+        """
+        Make a grid of samples and save it to the log directory.
         
+        By default, a 4x4 grid is created.
+        """
+        log_dir = self.logger.log_dir if self.logger is not None else None
+        if log_dir is None:
+            warning("Log directory is None. Skipping sample saving.")
+            return
+        log_dir = Path(log_dir)
+        
+        images, ys, _ = batch
+        y_hats: Iterable[ClassificationLabel] = preds.iter_labels()
+        
+        grid_contents = [
+            __class__._make_labeled_image(img, y, y_hat) 
+            for img, y, y_hat, _ in zip(images, ys, y_hats, range(grid_shape[0] * grid_shape[1]))
+        ]
+        
+        grid = torchvision.utils.make_grid(grid_contents, nrow=grid_shape[0])
+        image: PIL.Image.Image = to_pil_image(grid)
+        
+        sample_dir = log_dir / "val_samples"
+        sample_dir.mkdir(exist_ok=True, parents=True)
+        image.save(sample_dir / f"epoch_{self.current_epoch}.png")
+        
+    @staticmethod
+    def _make_labeled_image(img: torch.Tensor, y: ClassificationLabel, pred: ClassificationLabel) -> torch.Tensor:
+        """
+        Draws the labels and predictions on an image.
+        """
+        # Convert to CV2 format
+        cv2_img: np.ndarray = img.detach().cpu().numpy().transpose(1, 2, 0)
+        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_RGB2BGR)
+        
+        # Add labels
+        cv2.putText(cv2_img, f"truth: {y}", (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 2)
+        cv2.putText(cv2_img, f"pred: {pred}", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 2)
+        
+        # Convert back to PyTorch format
+        return torch.Tensor(cv2_img).transpose(0, 2).transpose(1, 2)
+    
     def _compute_metrics(
         self,
         preds: ResnetOutputTensors,
@@ -542,11 +615,12 @@ class SaveBestWeightsCallback(Callback):
         if log_dir is None:
             warning("Log directory is None. Skipping weight saving.")
             return
-        log_dir = Path(log_dir)
+        log_dir = Path(log_dir) / "weights"
+        log_dir.mkdir(exist_ok=True, parents=True)
         
         if self._is_improvement(metric):
             self.best_metric = metric
-            save_path = log_dir / f"best_{trainer.current_epoch}.pt"
+            save_path = log_dir  / f"best_{trainer.current_epoch}.pt"
             pl_module.save_weights(save_path)
             
             print(f"Saved best weights to {save_path}")
