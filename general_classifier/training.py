@@ -596,10 +596,10 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         return self._make_dataloader(self.train_dataset, 6)
 
     def val_dataloader(self):
-        return self._make_dataloader(self.val_dataset, 2, shuffle=False)
+        return self._make_dataloader(self.val_dataset, 2)
 
     def test_dataloader(self):
-        return self._make_dataloader(self.test_dataset, 2, shuffle=False)
+        return self._make_dataloader(self.test_dataset, 2)
 
 
 class SaveBestWeightsCallback(Callback):
