@@ -4,8 +4,8 @@ from typing import Iterable, Generator
 import multiprocessing
 
 import numpy as np
-from PIL import Image
 from tqdm import tqdm
+import cv2
 
 from .data_types import YoloImageData, YoloLabel, YoloBbox, Point, YoloOutline
 from .yolo_io_types import PredictionTask, DatasetDescriptor, YoloSubsetDirs, Task, ClassnameMap
@@ -106,7 +106,7 @@ class YoloReader:
         
         Useful for implementing datasets/dataloaders.
         """
-        image = np.array(Image.open(img_path))
+        image = cv2.imread(str(img_path))
 
         img_id = self._get_id_from_filename(img_path)
         _, labels_dir = self.descriptor.get_image_and_labels_dirs(task)
@@ -214,7 +214,7 @@ class YoloWriter:
             img_path = images_dir / f'{img_id}.png'
             labels_path = labels_dir / f'{img_id}.txt'
 
-            Image.fromarray(image).save(img_path)
+            cv2.imwrite(str(img_path), image)
 
             with open(labels_path, 'w') as f:
                 for label in labels:
