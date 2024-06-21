@@ -24,7 +24,7 @@ from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloReader
 from yolo_to_yolo.yolo_io_types import PredictionTask, Task
 from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18
-from uavf_2024.imaging.imaging_types import Character, Color, Shape
+from uavf_2024.imaging.imaging_types import Character, Color, Image, Shape
 
 from .optimizers import CustomOptimizer, ResnetOptimizers
 from .default_settings import BATCH_SIZE, DATA_YAML, EPOCHS, LOGS_PATH, DEBUG
@@ -115,7 +115,8 @@ class GeneralClassifierDataset(Dataset):
     def __init__(
         self, 
         yaml_path: Path, 
-        task: Task, 
+        task: Task,
+        normalize: bool = True,
         transformation: Callable[[YoloImageData], YoloImageData | Iterable[YoloImageData]] = lambda x: x,
         output_size: tuple[int, int] | None = (224, 224),
     ):
@@ -123,6 +124,7 @@ class GeneralClassifierDataset(Dataset):
         Args:
             yaml_path: Path to the YAML file containing the dataset information.
             task: The task to read the data for.
+            normalize: Whether to normalize the images to [0, 1].
             transformation: A function that takes a YoloImageData object and returns a transformed version of it.
                 If it's an Iterable, only the first element will be used. This is to support the current Augmentation classes.
         """
@@ -135,9 +137,32 @@ class GeneralClassifierDataset(Dataset):
         # We need to store this so that we can get the length of the dataset and index it.
         self.image_paths = list(self.yolo_reader.get_image_paths(task))
         
-        self.transformation = transformation
+        self.transformation = transformation if not normalize else lambda x: __class__._normalize(transformation(x))
         
         self.output_size = output_size
+
+    @staticmethod
+    def _normalize(data: YoloImageData | Iterable[YoloImageData]) -> YoloImageData | Iterable[YoloImageData]:
+        """
+        Normalize an Image to [0, 1].
+        """
+        if isinstance(data, YoloImageData):
+            return YoloImageData(
+                data.img_id, 
+                data.task, 
+                data.image.astype(np.float32) / 255, 
+                data.labels
+            )
+        
+        return (
+            YoloImageData(
+                img.img_id, 
+                img.task, 
+                img.image.astype(np.float32) / 255, 
+                img.labels
+            ) for img in data
+        )
+        
 
     def __len__(self):
         return len(self.image_paths)
