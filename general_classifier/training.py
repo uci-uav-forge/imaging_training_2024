@@ -295,7 +295,7 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         self, 
         model: ModelT,
         yaml_path: Path,
-        make_optimizer: Callable[[ModelT], CustomOptimizer],
+        optimizer_factory: type[CustomOptimizer[ModelT]],
         batch_size: int = 64,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = F.cross_entropy,
@@ -326,7 +326,7 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         # Turn off automatic optimization to allow for custom back-propagation.
         self.automatic_optimization = False
         
-        self.optimizer = make_optimizer(model)
+        self.optimizer = optimizer_factory(model, logger=self.logger)
         
         # Metrics calculators
         self.accuracy_metrics = self._make_classification_metrics(MulticlassAccuracy)
@@ -458,6 +458,9 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         self._log_classification_metrics(metrics)
         
         return total_loss
+    
+    def on_train_epoch_end(self):
+        self.optimizer.step_epoch()
         
     def _log_classification_metrics(self, metrics_dict: dict[str, ClassificationMetrics]):
         for metric_name, metrics in metrics_dict.items():
