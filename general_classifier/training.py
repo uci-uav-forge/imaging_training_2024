@@ -430,6 +430,10 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         self.optimizer.zero_grad()
         losses, _ = self.step(batch, batch_idx)
         total_loss = self.backward(losses)
+        
+        if total_loss is None:
+            raise ValueError("total_loss is None. This likely means all loss values were empty.")
+        
         self.optimizer.step()
         
         if total_loss is not None:
