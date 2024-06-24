@@ -54,9 +54,9 @@ class YoloDataPipeline:
         classes = reader.classes if self.classes is None else self.classes
         writer = YoloWriter(output_dir, self.prediction_task, classes)
 
-        data_in = reader.read()
+        data_in = reader.read(multiprocess=True)
         transformed = tqdm(self.apply(data_in))
-        writer.write(transformed)
+        writer.write(transformed, multiprocess=True)
 
 
 class DummyTransformer(YoloDataTransformer):

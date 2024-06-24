@@ -17,10 +17,18 @@ issac_to_yolo/sample_yolo_dataset
 YOLO_*/
 transformer_output*/
 
+# PyTorch Lightning Logs
+lightning_logs/
+
 # don't ignore yolo_to_yolo (it matches the above pattern and isn't just a dataset)
 !yolo_to_yolo/
 
 # IDE
 .idea/
 .vscode/
+
+# virtualenv
+*venv/
+
+# TODO: Document this
 *.lnk
