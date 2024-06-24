@@ -23,7 +23,7 @@ import cv2
 from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloReader
 from yolo_to_yolo.yolo_io_types import PredictionTask, Task
-from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18
+from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18, resnet34
 from uavf_2024.imaging.imaging_types import Character, Color, Image, Shape
 
 from .optimizers import CustomOptimizer, ResnetOptimizers
@@ -71,7 +71,14 @@ class ClassificationLosses(NamedTuple):
     character_color: torch.Tensor | None
     
     def get_total(self) -> torch.Tensor | None:
-        loss = sum(loss for loss in self if loss is not None)
+        loss = sum(loss for loss in self if loss is not None and not torch.any(torch.isnan(loss)))
+        
+        # None and NaN check/warnings
+        for loss, field in zip(self, self._fields):
+            if loss is None:
+                warning(f"Missing loss for {field}.")
+            elif torch.any(torch.isnan(loss)):
+                warning(f"NaN loss for {field}.")
         
         if not isinstance(loss, torch.Tensor):
             print("total_loss is not a tensor. This likely means all loss values were empty")
@@ -326,7 +333,7 @@ class GeneralClassifierLightningModule(LightningModule, Generic[ModelT]):
         # Turn off automatic optimization to allow for custom back-propagation.
         self.automatic_optimization = False
         
-        self.optimizer = optimizer_factory(model, logger=self.logger)
+        self.optimizer = optimizer_factory(model, lr=0.01, logger=self.logger)
         
         # Metrics calculators
         self.accuracy_metrics = self._make_classification_metrics(MulticlassAccuracy)
@@ -660,7 +667,7 @@ class SaveBestWeightsCallback(Callback):
             return metric > self.best_metric
 
 def train_resnet(
-    model: ResNet = resnet18([len(Shape), len(Color), Character.count(), len(Color)]),
+    model: ResNet = resnet34([len(Shape), len(Color), Character.count(), len(Color)]),
     weights_path: Path | None = None,
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
