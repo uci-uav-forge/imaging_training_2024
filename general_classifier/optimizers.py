@@ -13,7 +13,7 @@ from uavf_2024.imaging.general_classifier.resnet import ResNet
 
 ModelT = TypeVar("ModelT", bound=nn.Module)
 class CustomOptimizer(ABC, Generic[ModelT]):
-    def __init__(self, model: ModelT, lr: float = 0.005, logger: Logger | None = None):
+    def __init__(self, model: ModelT, lr: float = 0.002, logger: Logger | None = None):
         ...
         
     def step(self) -> None:
@@ -36,7 +36,7 @@ class ResnetOptimizers(CustomOptimizer):
     def __init__(
         self, 
         model: ResNet,
-        lr: float = 0.005,
+        lr: float = 0.002,
         logger: Logger | None = None
     ):
         print(f"Initializing ResnetOptimizers with lr={lr}")
