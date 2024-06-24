@@ -23,7 +23,7 @@ import cv2
 from yolo_to_yolo.data_types import YoloImageData
 from yolo_to_yolo.yolo_io import YoloReader
 from yolo_to_yolo.yolo_io_types import PredictionTask, Task
-from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18, resnet34
+from uavf_2024.imaging.general_classifier.resnet import ResNet, resnet18, resnet34, resnet50
 from uavf_2024.imaging.imaging_types import Character, Color, Image, Shape
 
 from .optimizers import CustomOptimizer, ResnetOptimizers
@@ -671,7 +671,7 @@ class SaveBestWeightsCallback(Callback):
             return metric > self.best_metric
 
 def train_resnet(
-    model: ResNet = resnet34([len(Shape), len(Color), Character.count(), len(Color)]),
+    model: ResNet = resnet50([len(Shape), len(Color), Character.count(), len(Color)]),
     weights_path: Path | None = None,
     data_yaml: Path = Path(DATA_YAML),
     epochs: int = EPOCHS,
@@ -692,7 +692,7 @@ def train_resnet(
     
     module = GeneralClassifierLightningModule(model, data_yaml, ResnetOptimizers, batch_size, device=torch.device("cuda:0"))
     
-    logger = TensorBoardLogger(logs_path, name="general_classifier")
+    logger = TensorBoardLogger(logs_path, name="resnet50")
     print("Initalized logger. Logging to", logger.log_dir)
     print(f"Use `tensorboard --logdir={logger.log_dir}` to view logs.")
     
